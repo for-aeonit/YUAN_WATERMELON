@@ -27,7 +27,7 @@ export class Game {
 	private hasDroppedFruit = false; // guard to prevent instant game over
 
 	constructor(private canvas: HTMLCanvasElement) {
-		this.engine = Engine.create({ gravity: { x: 0, y: PHYSICS.gravityY, scale: 0.001 } });
+		this.engine = Engine.create({ gravity: { x: 0, y: PHYSICS.gravityY, scale: 1 } });
 		this.world = this.engine.world;
 		this.renderer = new CanvasRenderer(canvas);
 		this.input = new Input(canvas, (px) => this.renderer.canvasPxToWorldX(px), this.renderer);
