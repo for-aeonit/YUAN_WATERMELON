@@ -1,4 +1,5 @@
 ﻿import { TIER_CONFIG, WORLD } from './config';
+import { resolveAsset } from './utils/resolveAsset';
 
 export interface RenderableBody {
 	id: number;
@@ -13,12 +14,10 @@ export class CanvasRenderer {
 	private ctx: CanvasRenderingContext2D;
 	private images: Map<number, HTMLImageElement> = new Map();
 	private previewCtx: CanvasRenderingContext2D;
+	private background: HTMLImageElement | null = null;
 	private scale = 1;
 	private offsetX = 0;
 	private offsetY = 0;
-
-	// Fixed aspect ratio constants
-	private readonly WORLD_ASPECT = 9/16; // width / height
 
 	constructor(private canvas: HTMLCanvasElement) {
 		const ctx = canvas.getContext('2d');
@@ -31,15 +30,34 @@ export class CanvasRenderer {
 		this.previewCtx = previewCtx;
 	}
 
+	private async loadImage(src: string): Promise<HTMLImageElement> {
+		return await new Promise<HTMLImageElement>((ok, err) => {
+			const i = new Image();
+			i.onload = () => ok(i);
+			i.onerror = (e) => {
+				console.error('[IMG-404]', src, e);
+				err(e);
+			};
+			i.src = src;
+		});
+	}
+
 	async loadImages(): Promise<void> {
+		// Load background
+		try {
+			this.background = await this.loadImage(resolveAsset('background/bg_01.png'));
+		} catch (e) {
+			console.warn('[BG-MISS] Background not found, using fallback');
+		}
+
+		// Load fruit images
 		const promises = TIER_CONFIG.map(async (tier, index) => {
-			const img = new Image();
-			img.src = `/${tier.img}`;
-			await new Promise<void>((resolve, reject) => {
-				img.onload = () => resolve();
-				img.onerror = () => reject(new Error(`Failed to load image: ${tier.img}`));
-			});
-			this.images.set(index, img);
+			try {
+				const img = await this.loadImage(resolveAsset(tier.img));
+				this.images.set(index, img);
+			} catch (e) {
+				console.warn('[FRUIT-MISS]', index, tier.img);
+			}
 		});
 		await Promise.all(promises);
 	}
@@ -48,44 +66,50 @@ export class CanvasRenderer {
 		return (px - this.offsetX) / this.scale;
 	}
 
-	resizeCanvas(): void {
-		const dpr = Math.max(1, window.devicePixelRatio || 1);
-		const vw = window.innerWidth;
-		const vh = window.innerHeight;
-		
-		// Compute CSS size keeping 9:16 inside viewport with letterbox/pillarbox
-		let cssW = vw;
-		let cssH = Math.floor(vw / this.WORLD_ASPECT);
-		
-		if (cssH > vh) {
-			cssH = vh;
-			cssW = Math.floor(vh * this.WORLD_ASPECT);
+	resizeToFit(container: HTMLElement): void {
+		const containerRect = container.getBoundingClientRect();
+		const containerAspect = containerRect.width / containerRect.height;
+		const gameAspect = WORLD.logicalWidth / WORLD.logicalHeight;
+
+		let canvasWidth: number;
+		let canvasHeight: number;
+
+		if (containerAspect > gameAspect) {
+			canvasHeight = containerRect.height;
+			canvasWidth = canvasHeight * gameAspect;
+		} else {
+			canvasWidth = containerRect.width;
+			canvasHeight = canvasWidth / gameAspect;
 		}
+
+		this.canvas.width = canvasWidth;
+		this.canvas.height = canvasHeight;
+		this.canvas.style.width = `${canvasWidth}px`;
+		this.canvas.style.height = `${canvasHeight}px`;
+
+		this.scale = canvasWidth / WORLD.logicalWidth;
+		this.offsetX = (containerRect.width - canvasWidth) / 2;
+		this.offsetY = (containerRect.height - canvasHeight) / 2;
+
+		const barTop = document.getElementById('bar-top') as HTMLElement;
+		const barBottom = document.getElementById('bar-bottom') as HTMLElement;
 		
-		this.canvas.style.width = cssW + 'px';
-		this.canvas.style.height = cssH + 'px';
-		this.canvas.width = Math.round(cssW * dpr);
-		this.canvas.height = Math.round(cssH * dpr);
-		
-		this.scale = this.canvas.width / WORLD.logicalWidth; // world→device scale
-		this.offsetX = (vw - cssW) / 2; // for input mapping
-		this.offsetY = (vh - cssH) / 2;
-	}
-
-	getScale(): number {
-		return this.scale;
-	}
-
-	getOffsetX(): number {
-		return this.offsetX;
-	}
-
-	getOffsetY(): number {
-		return this.offsetY;
+		if (containerAspect > gameAspect) {
+			const barHeight = (containerRect.height - canvasHeight) / 2;
+			barTop.style.height = `${barHeight}px`;
+			barBottom.style.height = `${barHeight}px`;
+		} else {
+			barTop.style.height = '0px';
+			barBottom.style.height = '0px';
+		}
 	}
 
 	clear(): void {
-		this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+		if (this.background) {
+			this.ctx.drawImage(this.background, 0, 0, this.canvas.width, this.canvas.height);
+		} else {
+			this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+		}
 	}
 
 	drawWorldBounds(width: number, height: number): void {
@@ -100,7 +124,7 @@ export class CanvasRenderer {
 		this.ctx.save();
 		
 		for (const body of bodies) {
-			const img = this.images.get(body.tierIndex);
+			const img = this.getFruitImage(body.tierIndex);
 			if (!img) {
 				this.ctx.fillStyle = this.getFruitColor(body.tierIndex);
 				this.ctx.beginPath();
@@ -123,7 +147,7 @@ export class CanvasRenderer {
 	}
 
 	drawDropper(x: number, tierIndex: number): void {
-		const img = this.images.get(tierIndex);
+		const img = this.getFruitImage(tierIndex);
 		if (!img) {
 			this.ctx.save();
 			this.ctx.globalAlpha = 0.6;
@@ -164,7 +188,7 @@ export class CanvasRenderer {
 	}
 
 	updatePreview(tierIndex: number): void {
-		const img = this.images.get(tierIndex);
+		const img = this.getFruitImage(tierIndex);
 		if (!img) {
 			this.previewCtx.fillStyle = this.getFruitColor(tierIndex);
 			this.previewCtx.beginPath();
@@ -175,6 +199,10 @@ export class CanvasRenderer {
 
 		this.previewCtx.clearRect(0, 0, 64, 64);
 		this.previewCtx.drawImage(img, 0, 0, 64, 64);
+	}
+
+	private getFruitImage(tierIndex: number): HTMLImageElement | null {
+		return this.images.get(tierIndex) ?? null;
 	}
 
 	private getFruitColor(tierIndex: number): string {

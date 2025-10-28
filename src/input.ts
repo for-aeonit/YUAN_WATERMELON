@@ -6,7 +6,7 @@ export class Input {
 
 	private unsubscribeFns: (() => void)[] = [];
 
-	constructor(private canvas: HTMLCanvasElement, private clientToWorld: (clientX: number, clientY: number) => { x: number; y: number }) {
+	constructor(private canvas: HTMLCanvasElement, private mapToWorldX: (px: number) => number) {
 		this.init();
 	}
 
@@ -22,16 +22,20 @@ export class Input {
 		window.addEventListener('keyup', ku, { passive: true });
 		this.unsubscribeFns.push(() => { window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku); });
 
-		const press = (clientX: number, clientY: number) => {
-			const worldPos = this.clientToWorld(clientX, clientY);
+		const press = (clientX: number) => {
+			const rect = this.canvas.getBoundingClientRect();
+			const x = clientX - rect.left;
+			const worldX = this.mapToWorldX(x);
 			this.axisX = 0; // we use absolute mapping; movement handled by game
-			(this as any)._lastTouchWorldX = worldPos.x;
+			(this as any)._lastTouchWorldX = worldX;
 			// Don't drop immediately on press, wait for release
 		};
-		const move = (clientX: number, clientY: number) => {
+		const move = (clientX: number) => {
 			if ((this as any)._lastTouchWorldX == null) return;
-			const worldPos = this.clientToWorld(clientX, clientY);
-			(this as any)._lastTouchWorldX = worldPos.x;
+			const rect = this.canvas.getBoundingClientRect();
+			const x = clientX - rect.left;
+			const worldX = this.mapToWorldX(x);
+			(this as any)._lastTouchWorldX = worldX;
 		};
 		const up = () => { 
 			if ((this as any)._lastTouchWorldX != null) {
@@ -40,16 +44,16 @@ export class Input {
 			(this as any)._lastTouchWorldX = null; 
 		};
 
-		const md = (e: MouseEvent) => { press(e.clientX, e.clientY); };
-		const mm = (e: MouseEvent) => { move(e.clientX, e.clientY); };
+		const md = (e: MouseEvent) => { press(e.clientX); };
+		const mm = (e: MouseEvent) => { move(e.clientX); };
 		const mu = () => { up(); };
 		this.canvas.addEventListener('mousedown', md);
 		window.addEventListener('mousemove', mm);
 		window.addEventListener('mouseup', mu);
 		this.unsubscribeFns.push(() => { this.canvas.removeEventListener('mousedown', md); window.removeEventListener('mousemove', mm); window.removeEventListener('mouseup', mu); });
 
-		const td = (e: TouchEvent) => { if (e.changedTouches[0]) press(e.changedTouches[0].clientX, e.changedTouches[0].clientY); };
-		const tm = (e: TouchEvent) => { if (e.changedTouches[0]) move(e.changedTouches[0].clientX, e.changedTouches[0].clientY); };
+		const td = (e: TouchEvent) => { if (e.changedTouches[0]) press(e.changedTouches[0].clientX); };
+		const tm = (e: TouchEvent) => { if (e.changedTouches[0]) move(e.changedTouches[0].clientX); };
 		const tu = () => { up(); };
 		this.canvas.addEventListener('touchstart', td, { passive: true });
 		this.canvas.addEventListener('touchmove', tm, { passive: true });

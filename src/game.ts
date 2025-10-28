@@ -29,7 +29,7 @@ export class Game {
 		this.engine = Engine.create({ gravity: { x: 0, y: PHYSICS.gravityY, scale: 0.001 } });
 		this.world = this.engine.world;
 		this.renderer = new CanvasRenderer(canvas);
-		this.input = new Input(canvas, (clientX, clientY) => this.clientToWorld(clientX, clientY));
+		this.input = new Input(canvas, (px) => this.renderer.canvasPxToWorldX(px));
 		this.audio = new AudioManager();
 		try { this.best = Number(localStorage.getItem('best-score') || '0') || 0; } catch {}
 	}
@@ -173,25 +173,12 @@ export class Game {
 	setMuted(m: boolean) { this.audio.setMuted(m); }
 	getMuted(): boolean { return this.audio.isMuted; }
 
-	private clientToWorld(clientX: number, clientY: number): { x: number; y: number } {
-		const xCss = clientX - this.renderer.getOffsetX();
-		const yCss = clientY - this.renderer.getOffsetY();
-		return { x: xCss / this.renderer.getScale(), y: yCss / this.renderer.getScale() };
-	}
-
 	async start() {
 		await this.init();
-		
-		// Debounced resize function
-		let resizeTimeout: number;
-		const resize = () => {
-			clearTimeout(resizeTimeout);
-			resizeTimeout = setTimeout(() => this.renderer.resizeCanvas(), 16);
-		};
-		
+		const container = document.getElementById('canvas-wrap')!;
+		const resize = () => this.renderer.resizeToFit(container);
 		resize();
 		window.addEventListener('resize', resize);
-		window.addEventListener('orientationchange', resize);
 		// fixed timestep loop at 60Hz
 		let acc = 0; let last = performance.now();
 		const step = 1000/60;
