@@ -57,7 +57,6 @@ export class CanvasRenderer {
 	}
 
 	resizeCanvas(): void {
-		const dpr = Math.max(1, window.devicePixelRatio || 1);
 		const wrap = document.querySelector('.game-wrap');
 		const rect = wrap!.getBoundingClientRect();
 		const vw = Math.max(1, rect.width), vh = Math.max(1, rect.height);
@@ -68,10 +67,10 @@ export class CanvasRenderer {
 
 		this.canvas.style.width = cssW + 'px';
 		this.canvas.style.height = cssH + 'px';
-		this.canvas.width = Math.round(cssW * dpr);
-		this.canvas.height = Math.round(cssH * dpr);
+		this.canvas.width = cssW;
+		this.canvas.height = cssH;
 
-		VIEW.scale = this.canvas.width / VIEW.worldW;   // device px per world unit
+		VIEW.scale = cssW / VIEW.worldW;   // CSS px per world unit
 		VIEW.offsetX = (vw - cssW) / 2;
 		VIEW.offsetY = (vh - cssH) / 2;
 	}
