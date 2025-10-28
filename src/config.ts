@@ -6,22 +6,18 @@ export type Tier = {
 	label: string;
 };
 
-export function resolveAsset(path: string): string {
-	return import.meta.env.BASE_URL + 'assets/' + path;
-}
-
 export const TIER_CONFIG: Tier[] = [
-	{ key:'tier0', radius:16, mass:1.0, img:resolveAsset('icon_01.png'), label:'Lv1' },
-	{ key:'tier1', radius:22, mass:1.2, img:resolveAsset('icon_02.png'), label:'Lv2' },
-	{ key:'tier2', radius:30, mass:1.4, img:resolveAsset('icon_03.png'), label:'Lv3' },
-	{ key:'tier3', radius:40, mass:1.8, img:resolveAsset('icon_04.png'), label:'Lv4' },
-	{ key:'tier4', radius:52, mass:2.2, img:resolveAsset('icon_05.png'), label:'Lv5' },
-	{ key:'tier5', radius:64, mass:3.0, img:resolveAsset('icon_06.png'), label:'Lv6' },
-	{ key:'tier6', radius:78, mass:3.6, img:resolveAsset('icon_07.png'), label:'Lv7' },
-	{ key:'tier7', radius:92, mass:4.5, img:resolveAsset('icon_08.png'), label:'Lv8' },
-	{ key:'tier8', radius:108, mass:5.2, img:resolveAsset('icon_09.png'), label:'Lv9' },
-	{ key:'tier9', radius:124, mass:6.0, img:resolveAsset('icon_10.png'), label:'Lv10' },
-	{ key:'tier10', radius:140, mass:7.0, img:resolveAsset('icon_11.png'), label:'MAX' },
+	{ key:'tier0', radius:16, mass:1.0, img:'assets/icon_01.png', label:'Lv1' },
+	{ key:'tier1', radius:22, mass:1.2, img:'assets/icon_02.png', label:'Lv2' },
+	{ key:'tier2', radius:30, mass:1.4, img:'assets/icon_03.png', label:'Lv3' },
+	{ key:'tier3', radius:40, mass:1.8, img:'assets/icon_04.png', label:'Lv4' },
+	{ key:'tier4', radius:52, mass:2.2, img:'assets/icon_05.png', label:'Lv5' },
+	{ key:'tier5', radius:64, mass:3.0, img:'assets/icon_06.png', label:'Lv6' },
+	{ key:'tier6', radius:78, mass:3.6, img:'assets/icon_07.png', label:'Lv7' },
+	{ key:'tier7', radius:92, mass:4.5, img:'assets/icon_08.png', label:'Lv8' },
+	{ key:'tier8', radius:108, mass:5.2, img:'assets/icon_09.png', label:'Lv9' },
+	{ key:'tier9', radius:124, mass:6.0, img:'assets/icon_10.png', label:'Lv10' },
+	{ key:'tier10', radius:140, mass:7.0, img:'assets/icon_11.png', label:'MAX' },
 ];
 
 export const PHYSICS = {
