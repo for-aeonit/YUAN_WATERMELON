@@ -9,14 +9,6 @@ export interface RenderableBody {
 	tierIndex: number;
 }
 
-export const VIEWPORT = {
-	worldWidth: WORLD.logicalWidth,
-	worldHeight: WORLD.logicalHeight,
-	scale: 1,
-	offsetX: 0,
-	offsetY: 0
-};
-
 export class CanvasRenderer {
 	private ctx: CanvasRenderingContext2D;
 	private images: Map<number, HTMLImageElement> = new Map();
@@ -24,7 +16,6 @@ export class CanvasRenderer {
 	private scale = 1;
 	private offsetX = 0;
 	private offsetY = 0;
-	private backgroundImage: HTMLImageElement | null = null;
 
 	constructor(private canvas: HTMLCanvasElement) {
 		const ctx = canvas.getContext('2d');
@@ -40,7 +31,7 @@ export class CanvasRenderer {
 	async loadImages(): Promise<void> {
 		const promises = TIER_CONFIG.map(async (tier, index) => {
 			const img = new Image();
-			img.src = `/${tier.img}`;
+			img.src = import.meta.env.BASE_URL + tier.img;
 			await new Promise<void>((resolve, reject) => {
 				img.onload = () => resolve();
 				img.onerror = () => reject(new Error(`Failed to load image: ${tier.img}`));
@@ -48,34 +39,6 @@ export class CanvasRenderer {
 			this.images.set(index, img);
 		});
 		await Promise.all(promises);
-	}
-
-	async loadBackground(): Promise<void> {
-		try {
-			const img = new Image();
-			img.src = '/Asset/background/BG_01.png';
-			await new Promise<void>((resolve, reject) => {
-				img.onload = () => resolve();
-				img.onerror = () => reject(new Error('Failed to load background image'));
-			});
-			this.backgroundImage = img;
-		} catch (error) {
-			console.warn('Background image failed to load:', error);
-			this.backgroundImage = null;
-		}
-	}
-
-	drawBackground(): void {
-		if (this.backgroundImage) {
-			this.ctx.drawImage(this.backgroundImage, 0, 0, this.canvas.width, this.canvas.height);
-		} else {
-			// Fallback gradient background
-			const gradient = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height);
-			gradient.addColorStop(0, '#0f172a');
-			gradient.addColorStop(1, '#0b1222');
-			this.ctx.fillStyle = gradient;
-			this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-		}
 	}
 
 	canvasPxToWorldX(px: number): number {
@@ -106,11 +69,6 @@ export class CanvasRenderer {
 		this.scale = canvasWidth / WORLD.logicalWidth;
 		this.offsetX = (containerRect.width - canvasWidth) / 2;
 		this.offsetY = (containerRect.height - canvasHeight) / 2;
-
-		// Update global VIEWPORT for input mapping
-		VIEWPORT.scale = this.scale;
-		VIEWPORT.offsetX = this.offsetX;
-		VIEWPORT.offsetY = this.offsetY;
 
 		const barTop = document.getElementById('bar-top') as HTMLElement;
 		const barBottom = document.getElementById('bar-bottom') as HTMLElement;
@@ -201,18 +159,6 @@ export class CanvasRenderer {
 			this.ctx.fill();
 		}
 		
-		this.ctx.restore();
-	}
-
-	drawGameOverLine(): void {
-		this.ctx.save();
-		this.ctx.strokeStyle = '#ff0000';
-		this.ctx.lineWidth = 3;
-		this.ctx.setLineDash([5, 5]);
-		this.ctx.beginPath();
-		this.ctx.moveTo(0, WORLD.maxHeightY);
-		this.ctx.lineTo(WORLD.logicalWidth, WORLD.maxHeightY);
-		this.ctx.stroke();
 		this.ctx.restore();
 	}
 

@@ -1,7 +1,7 @@
 import Matter, { Engine, World, Bodies, Body, Composite, Events, Detector } from 'matter-js';
 import { TIER_CONFIG, WORLD, PHYSICS, SCORING } from './config';
 import { CanvasRenderer, RenderableBody } from './renderer';
-import { Input, getPointerWorldX } from './input';
+import { Input } from './input';
 import { AudioManager } from './audio';
 
 type FruitBody = Body & { plugin: { tierIndex: number; merging?: boolean } };
@@ -35,10 +35,7 @@ export class Game {
 	}
 
 	async init() {
-		await Promise.all([
-			this.renderer.loadImages(),
-			this.renderer.loadBackground()
-		]);
+		await this.renderer.loadImages();
 		this.resetWorldBounds();
 		this.wireEvents();
 		this.rollNext();
@@ -188,10 +185,13 @@ export class Game {
 		const tick = () => {
 			const now = performance.now(); let dt = now - last; last = now;
 			acc += dt; if (acc > 1000) acc = 1000; // spiral of death cap
-			// Use new pointer tracking with smoothing
-			const targetX = getPointerWorldX();
-			this.dropperX += (targetX - this.dropperX) * Math.min(1, 12 * dt / 1000); // smoothing
-			this.dropperX = Math.max(TIER_CONFIG[0].radius + 4, Math.min(WORLD.logicalWidth - TIER_CONFIG[0].radius - 4, this.dropperX));
+			const touchX = this.input.getTouchWorldX();
+			if (touchX != null) this.dropperX = Math.max(TIER_CONFIG[0].radius + 4, Math.min(WORLD.logicalWidth - TIER_CONFIG[0].radius - 4, touchX));
+			else {
+				const speed = 420; // px/s
+				const dir = (this.input.right ? 1 : 0) - (this.input.left ? 1 : 0);
+				this.dropperX = Math.max(TIER_CONFIG[0].radius + 4, Math.min(WORLD.logicalWidth - TIER_CONFIG[0].radius - 4, this.dropperX + dir * (dt/1000) * speed));
+			}
 			if (this.input.consumeDrop()) this.dropFruit();
 			if (!this.paused && !this.gameOver) {
 				while (acc >= step) { Engine.update(this.engine, step); acc -= step; }
@@ -202,8 +202,6 @@ export class Game {
 			this.effects = this.effects.filter(e => e.t < e.duration);
 			// render
 			this.renderer.clear();
-			this.renderer.drawBackground(); // Draw background first
-			this.renderer.drawGameOverLine(); // Draw red game over line
 			const renderables: RenderableBody[] = this.bodies.map(b => ({ id: b.id, x: b.position.x, y: b.position.y, r: TIER_CONFIG[b.plugin.tierIndex].radius, angle: b.angle, tierIndex: b.plugin.tierIndex }));
 			this.renderer.drawWorldBounds(WORLD.logicalWidth, WORLD.logicalHeight);
 			this.renderer.drawBodies(renderables);
