@@ -1,4 +1,5 @@
 ﻿import { TIER_CONFIG, WORLD, VIEW } from './config';
+import { resolveAsset } from './utils/resolveAsset';
 
 export interface RenderableBody {
 	id: number;
@@ -26,15 +27,11 @@ export class CanvasRenderer {
 		this.previewCtx = previewCtx;
 	}
 
-	private resolveAsset(path: string): string {
-		return `/assets/${path}`;
-	}
-
 	async loadImages(): Promise<void> {
 		// Load background image
 		const bgPromise = new Promise<void>((resolve, reject) => {
 			const img = new Image();
-			img.src = this.resolveAsset('background/bg_01.png');
+			img.src = resolveAsset('background/bg_01.png');
 			img.onload = () => {
 				this.backgroundImage = img;
 				resolve();
@@ -45,7 +42,7 @@ export class CanvasRenderer {
 		// Load tier images
 		const tierPromises = TIER_CONFIG.map(async (tier, index) => {
 			const img = new Image();
-			img.src = this.resolveAsset(tier.img);
+			img.src = resolveAsset(tier.img);
 			await new Promise<void>((resolve, reject) => {
 				img.onload = () => resolve();
 				img.onerror = () => reject(new Error(`Failed to load image: ${tier.img}`));
@@ -57,6 +54,7 @@ export class CanvasRenderer {
 	}
 
 	resizeCanvas(): void {
+		const dpr = Math.max(1, window.devicePixelRatio || 1);
 		const wrap = document.querySelector('.game-wrap');
 		const rect = wrap!.getBoundingClientRect();
 		const vw = Math.max(1, rect.width), vh = Math.max(1, rect.height);
@@ -67,10 +65,10 @@ export class CanvasRenderer {
 
 		this.canvas.style.width = cssW + 'px';
 		this.canvas.style.height = cssH + 'px';
-		this.canvas.width = cssW;
-		this.canvas.height = cssH;
+		this.canvas.width = Math.round(cssW * dpr);
+		this.canvas.height = Math.round(cssH * dpr);
 
-		VIEW.scale = cssW / VIEW.worldW;   // CSS px per world unit
+		VIEW.scale = this.canvas.width / VIEW.worldW;   // device px per world unit
 		VIEW.offsetX = (vw - cssW) / 2;
 		VIEW.offsetY = (vh - cssH) / 2;
 	}
@@ -106,6 +104,18 @@ export class CanvasRenderer {
 		this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
 		this.ctx.lineWidth = 2;
 		this.ctx.strokeRect(0, 0, WORLD.width * VIEW.scale, WORLD.height * VIEW.scale);
+		this.ctx.restore();
+	}
+
+	drawGameOverLine(): void {
+		this.ctx.save();
+		this.ctx.strokeStyle = 'red';
+		this.ctx.lineWidth = 2;
+		const y = WORLD.gameOverLineY * VIEW.scale;
+		this.ctx.beginPath();
+		this.ctx.moveTo(0, y);
+		this.ctx.lineTo(this.canvas.width, y);
+		this.ctx.stroke();
 		this.ctx.restore();
 	}
 

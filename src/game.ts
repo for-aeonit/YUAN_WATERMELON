@@ -25,9 +25,10 @@ export class Game {
 	private paused = false;
 	private effects: { x: number; y: number; t: number; duration: number }[] = [];
 	private hasDroppedFruit = false; // guard to prevent instant game over
+	private state: 'RUNNING' | 'GAME_OVER' = 'RUNNING';
 
 	constructor(private canvas: HTMLCanvasElement) {
-		this.engine = Engine.create({ gravity: { x: 0, y: PHYSICS.gravityY, scale: 1 } });
+		this.engine = Engine.create({ gravity: { x: 0, y: PHYSICS.gravityY, scale: 0.001 } });
 		this.world = this.engine.world;
 		this.renderer = new CanvasRenderer(canvas);
 		this.input = new Input(canvas, (px) => this.renderer.canvasPxToWorldX(px), this.renderer);
@@ -140,7 +141,11 @@ export class Game {
 	private dropFruit() {
 		if (this.gameOver || this.paused) return;
 		const tier = this.nextTierIndex;
-		this.createFruit(tier, this.dropperX, WORLD.spawnY);
+		const radius = TIER_CONFIG[tier].radius;
+		const leftWall = radius + 4;
+		const rightWall = WORLD.width - radius - 4;
+		const clampedX = Math.max(leftWall, Math.min(rightWall, this.dropperX));
+		this.createFruit(tier, clampedX, WORLD.spawnY);
 		this.hasDroppedFruit = true; // mark that we've dropped at least one fruit
 		this.rollNext();
 	}
@@ -169,8 +174,18 @@ export class Game {
 
 	private triggerGameOver() {
 		this.gameOver = true;
+		this.state = 'GAME_OVER';
 		this.audio.play('gameover');
-		const dialog = document.getElementById('dialog')!; dialog.classList.remove('hidden');
+		this.updateOverlayVisibility();
+	}
+
+	private updateOverlayVisibility() {
+		const dialog = document.getElementById('dialog')!;
+		if (this.state === 'GAME_OVER') {
+			dialog.classList.remove('hidden');
+		} else {
+			dialog.classList.add('hidden');
+		}
 	}
 
 	restart() {
@@ -180,20 +195,31 @@ export class Game {
 		this.comboCount = 0; 
 		this.lastMergeTime = 0;
 		this.hasDroppedFruit = false; // reset the guard
+		this.state = 'RUNNING'; // set state to RUNNING
 		this.resetWorldBounds(); 
 		this.rollNext(); 
 		this.updateHUD();
-		const dialog = document.getElementById('dialog')!; dialog.classList.add('hidden');
+		this.updateOverlayVisibility(); // hide overlay
 	}
 
 	setPaused(p: boolean) { this.paused = p; }
 	setMuted(m: boolean) { this.audio.setMuted(m); }
 	getMuted(): boolean { return this.audio.isMuted; }
+	resizeCanvas() { this.renderer.resizeCanvas(); }
 
 	async start() {
 		await this.init();
-		const resize = () => this.renderer.resizeCanvas();
-		resize(); // call resizeCanvas on start
+		
+		// Debounced resize function
+		let resizeTimeout: number;
+		const resize = () => {
+			clearTimeout(resizeTimeout);
+			resizeTimeout = setTimeout(() => this.renderer.resizeCanvas(), 100);
+		};
+		
+		// Call resizeCanvas before starting the loop
+		this.renderer.resizeCanvas();
+		
 		window.addEventListener('resize', resize);
 		window.addEventListener('orientationchange', resize);
 		// fixed timestep loop at 60Hz
@@ -221,6 +247,7 @@ export class Game {
 			this.renderer.clear();
 			const renderables: RenderableBody[] = this.bodies.map(b => ({ id: b.id, x: b.position.x, y: b.position.y, r: TIER_CONFIG[b.plugin.tierIndex].radius, angle: b.angle, tierIndex: b.plugin.tierIndex }));
 			this.renderer.drawWorldBounds();
+			this.renderer.drawGameOverLine();
 			this.renderer.drawBodies(renderables);
 			this.renderer.drawDropper(this.dropperX, this.nextTierIndex);
 			this.renderer.drawEffects(this.effects);

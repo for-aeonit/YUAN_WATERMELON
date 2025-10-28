@@ -1,4 +1,6 @@
 import { CanvasRenderer } from './renderer';
+import { clientToWorldFromEvent } from './utils/input';
+import { VIEW } from './config';
 
 export class Input {
 	left = false;
@@ -24,17 +26,15 @@ export class Input {
 		window.addEventListener('keyup', ku, { passive: true });
 		this.unsubscribeFns.push(() => { window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku); });
 
-		const press = (clientX: number) => {
-			const rect = this.canvas.getBoundingClientRect();
-			const x = clientX - rect.left;
-			const worldX = this.mapToWorldX(x);
+		const press = (ev: MouseEvent | TouchEvent) => {
+			const p = clientToWorldFromEvent(ev, this.canvas, VIEW.scale);
 			this.axisX = 0; // we use absolute mapping; movement handled by game
-			(this as any)._lastTouchWorldX = worldX;
+			(this as any)._lastTouchWorldX = p.x;
 			// Don't drop immediately on press, wait for release
 		};
 		const move = (ev: MouseEvent | TouchEvent) => {
 			if ((this as any)._lastTouchWorldX == null) return;
-			const p = this.renderer.clientToWorldFromEvent(ev);
+			const p = clientToWorldFromEvent(ev, this.canvas, VIEW.scale);
 			(this as any)._lastTouchWorldX = p.x;
 		};
 		const up = () => { 
@@ -44,7 +44,7 @@ export class Input {
 			(this as any)._lastTouchWorldX = null; 
 		};
 
-		const md = (e: MouseEvent) => { press(e.clientX); };
+		const md = (e: MouseEvent) => { press(e); };
 		const mm = (e: MouseEvent) => { move(e); };
 		const mu = () => { up(); };
 		this.canvas.addEventListener('mousedown', md);
@@ -52,7 +52,7 @@ export class Input {
 		window.addEventListener('mouseup', mu);
 		this.unsubscribeFns.push(() => { this.canvas.removeEventListener('mousedown', md); window.removeEventListener('mousemove', mm); window.removeEventListener('mouseup', mu); });
 
-		const td = (e: TouchEvent) => { if (e.changedTouches[0]) press(e.changedTouches[0].clientX); };
+		const td = (e: TouchEvent) => { if (e.changedTouches[0]) press(e); };
 		const tm = (e: TouchEvent) => { if (e.changedTouches[0]) move(e); };
 		const tu = () => { up(); };
 		this.canvas.addEventListener('touchstart', td, { passive: true });

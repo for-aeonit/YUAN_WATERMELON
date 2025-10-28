@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-  base: '/YUAN_WATERMELON/',
+  base: process.env.GITHUB_ACTIONS === 'true' ? '/YUAN_WATERMELON/' : '/',
 })
 
 
