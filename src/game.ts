@@ -172,6 +172,11 @@ export class Game {
 	setPaused(p: boolean) { this.paused = p; }
 	setMuted(m: boolean) { this.audio.setMuted(m); }
 	getMuted(): boolean { return this.audio.isMuted; }
+	
+	resizeCanvas(width: number, height: number) {
+		// Update renderer with new canvas dimensions
+		this.renderer.resizeToFit(document.getElementById('canvas-wrap')!);
+	}
 
 	async start() {
 		await this.init();

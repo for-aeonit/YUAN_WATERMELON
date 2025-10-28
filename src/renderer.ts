@@ -1,5 +1,4 @@
 ﻿import { TIER_CONFIG, WORLD } from './config';
-import { resolveAsset } from './utils/resolveAsset';
 
 export interface RenderableBody {
 	id: number;
@@ -32,7 +31,7 @@ export class CanvasRenderer {
 	async loadImages(): Promise<void> {
 		const promises = TIER_CONFIG.map(async (tier, index) => {
 			const img = new Image();
-			img.src = resolveAsset(tier.img);
+			img.src = `/${tier.img}`;
 			await new Promise<void>((resolve, reject) => {
 				img.onload = () => resolve();
 				img.onerror = () => reject(new Error(`Failed to load image: ${tier.img}`));
@@ -54,28 +53,37 @@ export class CanvasRenderer {
 		let canvasWidth: number;
 		let canvasHeight: number;
 
+		// Ensure minimum dimensions for mobile
+		const minWidth = Math.min(320, containerRect.width);
+		const minHeight = Math.min(568, containerRect.height);
+
 		if (containerAspect > gameAspect) {
-			canvasHeight = containerRect.height;
+			// Container is wider than game aspect ratio - fit height
+			canvasHeight = Math.max(minHeight, containerRect.height);
 			canvasWidth = canvasHeight * gameAspect;
 		} else {
-			canvasWidth = containerRect.width;
+			// Container is taller than game aspect ratio - fit width
+			canvasWidth = Math.max(minWidth, containerRect.width);
 			canvasHeight = canvasWidth / gameAspect;
 		}
 
+		// Set canvas dimensions
 		this.canvas.width = canvasWidth;
 		this.canvas.height = canvasHeight;
 		this.canvas.style.width = `${canvasWidth}px`;
 		this.canvas.style.height = `${canvasHeight}px`;
 
+		// Calculate scaling and offsets
 		this.scale = canvasWidth / WORLD.logicalWidth;
 		this.offsetX = (containerRect.width - canvasWidth) / 2;
 		this.offsetY = (containerRect.height - canvasHeight) / 2;
 
+		// Update letterbox bars for aspect ratio differences
 		const barTop = document.getElementById('bar-top') as HTMLElement;
 		const barBottom = document.getElementById('bar-bottom') as HTMLElement;
 		
 		if (containerAspect > gameAspect) {
-			const barHeight = (containerRect.height - canvasHeight) / 2;
+			const barHeight = Math.max(0, (containerRect.height - canvasHeight) / 2);
 			barTop.style.height = `${barHeight}px`;
 			barBottom.style.height = `${barHeight}px`;
 		} else {
