@@ -29,7 +29,7 @@ export class Game {
 		this.engine = Engine.create({ gravity: { x: 0, y: PHYSICS.gravityY, scale: 0.001 } });
 		this.world = this.engine.world;
 		this.renderer = new CanvasRenderer(canvas);
-		this.input = new Input(canvas);
+		this.input = new Input(canvas, (px) => this.renderer.canvasPxToWorldX(px));
 		this.audio = new AudioManager();
 		try { this.best = Number(localStorage.getItem('best-score') || '0') || 0; } catch {}
 	}
@@ -175,32 +175,26 @@ export class Game {
 
 	async start() {
 		await this.init();
-		
-		// Setup resize handlers
-		const resize = () => this.renderer.resizeCanvas();
+		const resize = () => {
+			this.renderer.resizeCanvas();
+			this.input.updateScale(this.renderer.scale);
+		};
 		resize();
-		window.addEventListener('resize', () => requestAnimationFrame(resize));
-		window.addEventListener('orientationchange', () => setTimeout(resize, 100));
-		
+		window.addEventListener('resize', resize);
+		window.addEventListener('orientationchange', resize);
 		// fixed timestep loop at 60Hz
 		let acc = 0; let last = performance.now();
 		const step = 1000/60;
 		const tick = () => {
 			const now = performance.now(); let dt = now - last; last = now;
 			acc += dt; if (acc > 1000) acc = 1000; // spiral of death cap
-			
-			// Handle touch input with proper coordinate mapping
-			const touchCoords = this.input.getTouchCoords();
-			if (touchCoords != null) {
-				// Convert canvas coordinates to world coordinates
-				const worldX = touchCoords.x / this.renderer.scale;
-				this.dropperX = Math.max(TIER_CONFIG[0].radius + 4, Math.min(WORLD.logicalWidth - TIER_CONFIG[0].radius - 4, worldX));
-			} else {
+			const touchX = this.input.getTouchWorldX();
+			if (touchX != null) this.dropperX = Math.max(TIER_CONFIG[0].radius + 4, Math.min(WORLD.logicalWidth - TIER_CONFIG[0].radius - 4, touchX));
+			else {
 				const speed = 420; // px/s
 				const dir = (this.input.right ? 1 : 0) - (this.input.left ? 1 : 0);
 				this.dropperX = Math.max(TIER_CONFIG[0].radius + 4, Math.min(WORLD.logicalWidth - TIER_CONFIG[0].radius - 4, this.dropperX + dir * (dt/1000) * speed));
 			}
-			
 			if (this.input.consumeDrop()) this.dropFruit();
 			if (!this.paused && !this.gameOver) {
 				while (acc >= step) { Engine.update(this.engine, step); acc -= step; }

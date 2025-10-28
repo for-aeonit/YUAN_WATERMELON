@@ -1,4 +1,5 @@
 ﻿import { TIER_CONFIG, WORLD } from './config';
+import { resolveAsset } from './utils/resolveAsset';
 
 export interface RenderableBody {
 	id: number;
@@ -13,7 +14,7 @@ export class CanvasRenderer {
 	private ctx: CanvasRenderingContext2D;
 	private images: Map<number, HTMLImageElement> = new Map();
 	private previewCtx: CanvasRenderingContext2D;
-	public scale = 1;
+	private scale = 1;
 	private offsetX = 0;
 	private offsetY = 0;
 	private backgroundImage: HTMLImageElement | null = null;
@@ -29,26 +30,26 @@ export class CanvasRenderer {
 		this.previewCtx = previewCtx;
 	}
 
+	async loadImage(src: string): Promise<HTMLImageElement> {
+		return await new Promise<HTMLImageElement>((ok, err) => {
+			const i = new Image();
+			i.onload = () => ok(i);
+			i.onerror = (e) => { console.error('[IMG-404]', src, e); err(e); };
+			i.src = src;
+		});
+	}
+
 	async loadImages(): Promise<void> {
 		// Load background image
-		const bgImg = new Image();
-		bgImg.src = '/Asset/background/bg_01.png';
-		await new Promise<void>((resolve, reject) => {
-			bgImg.onload = () => {
-				this.backgroundImage = bgImg;
-				resolve();
-			};
-			bgImg.onerror = () => reject(new Error('Failed to load background image'));
-		});
+		try {
+			this.backgroundImage = await this.loadImage(resolveAsset('background/bg_01.png'));
+		} catch (e) {
+			console.warn('Background image not found, using fallback');
+		}
 
-		// Load fruit images
+		// Load fruit sprites
 		const promises = TIER_CONFIG.map(async (tier, index) => {
-			const img = new Image();
-			img.src = `/${tier.img}`;
-			await new Promise<void>((resolve, reject) => {
-				img.onload = () => resolve();
-				img.onerror = () => reject(new Error(`Failed to load image: ${tier.img}`));
-			});
+			const img = await this.loadImage(resolveAsset(tier.img));
 			this.images.set(index, img);
 		});
 		await Promise.all(promises);
@@ -59,30 +60,40 @@ export class CanvasRenderer {
 	}
 
 	resizeCanvas(): void {
+		const WORLD = { width: 900, height: 1600 };
+		const VIEW = { scale: 1 };
+
 		const dpr = Math.max(1, window.devicePixelRatio || 1);
 		const wrap = document.querySelector('.game-wrap') as HTMLElement;
-		if (!wrap) return;
-		
 		const rect = wrap.getBoundingClientRect();
-		const vw = Math.max(1, rect.width);
-		const vh = Math.max(1, rect.height);
-		const aspect = WORLD.logicalWidth / WORLD.logicalHeight; // 9/16
+		const vw = Math.max(1, rect.width), vh = Math.max(1, rect.height);
+		const aspect = WORLD.width / WORLD.height;
 
-		// Fit inside viewport with letterboxing
 		let cssW = vw, cssH = Math.floor(vw / aspect);
-		if (cssH > vh) { 
-			cssH = vh; 
-			cssW = Math.floor(vh * aspect); 
-		}
+		if (cssH > vh) { cssH = vh; cssW = Math.floor(vh * aspect); }
 
 		this.canvas.style.width = cssW + 'px';
 		this.canvas.style.height = cssH + 'px';
 		this.canvas.width = Math.round(cssW * dpr);
 		this.canvas.height = Math.round(cssH * dpr);
 
-		this.scale = this.canvas.width / WORLD.logicalWidth;   // device px per world unit
-		this.offsetX = Math.floor((vw - cssW) / 2);
-		this.offsetY = Math.floor((vh - cssH) / 2);
+		VIEW.scale = this.canvas.width / WORLD.width;
+		this.scale = VIEW.scale;
+		this.offsetX = (rect.width - cssW) / 2;
+		this.offsetY = (rect.height - cssH) / 2;
+
+		// Update letterbox bars
+		const barTop = document.getElementById('bar-top') as HTMLElement;
+		const barBottom = document.getElementById('bar-bottom') as HTMLElement;
+		
+		if (rect.width / rect.height > aspect) {
+			const barHeight = (rect.height - cssH) / 2;
+			barTop.style.height = `${barHeight}px`;
+			barBottom.style.height = `${barHeight}px`;
+		} else {
+			barTop.style.height = '0px';
+			barBottom.style.height = '0px';
+		}
 	}
 
 	clear(): void {

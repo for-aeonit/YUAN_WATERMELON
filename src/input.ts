@@ -5,19 +5,23 @@ export class Input {
 	axisX = 0; // -1..1
 
 	private unsubscribeFns: (() => void)[] = [];
+	private VIEW = { scale: 1 };
 
-	constructor(private canvas: HTMLCanvasElement) {
+	constructor(private canvas: HTMLCanvasElement, private mapToWorldX: (px: number) => number) {
 		this.init();
 	}
 
-	private clientToWorldFromEvent(ev: MouseEvent | TouchEvent): { x: number; y: number } {
-		const c = this.canvas;
+	updateScale(scale: number) {
+		this.VIEW.scale = scale;
+	}
+
+	clientToWorld(ev: MouseEvent | TouchEvent): { x: number; y: number } {
+		const c = document.getElementById('game') as HTMLCanvasElement;
 		const r = c.getBoundingClientRect();
 		const cx = ('touches' in ev && ev.touches?.length) ? ev.touches[0].clientX : (ev as MouseEvent).clientX;
 		const cy = ('touches' in ev && ev.touches?.length) ? ev.touches[0].clientY : (ev as MouseEvent).clientY;
-		const xCss = cx - r.left;  // position inside the visible canvas area
-		const yCss = cy - r.top;
-		return { x: xCss, y: yCss };
+		const xCss = cx - r.left, yCss = cy - r.top;
+		return { x: xCss / this.VIEW.scale, y: yCss / this.VIEW.scale };
 	}
 
 	private init() {
@@ -32,34 +36,38 @@ export class Input {
 		window.addEventListener('keyup', ku, { passive: true });
 		this.unsubscribeFns.push(() => { window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku); });
 
-		const press = (ev: MouseEvent | TouchEvent) => {
-			const coords = this.clientToWorldFromEvent(ev);
+		const press = (clientX: number) => {
+			const rect = this.canvas.getBoundingClientRect();
+			const x = clientX - rect.left;
+			const worldX = this.mapToWorldX(x);
 			this.axisX = 0; // we use absolute mapping; movement handled by game
-			(this as any)._lastTouchCoords = coords;
+			(this as any)._lastTouchWorldX = worldX;
 			// Don't drop immediately on press, wait for release
 		};
-		const move = (ev: MouseEvent | TouchEvent) => {
-			if ((this as any)._lastTouchCoords == null) return;
-			const coords = this.clientToWorldFromEvent(ev);
-			(this as any)._lastTouchCoords = coords;
+		const move = (clientX: number) => {
+			if ((this as any)._lastTouchWorldX == null) return;
+			const rect = this.canvas.getBoundingClientRect();
+			const x = clientX - rect.left;
+			const worldX = this.mapToWorldX(x);
+			(this as any)._lastTouchWorldX = worldX;
 		};
 		const up = () => { 
-			if ((this as any)._lastTouchCoords != null) {
+			if ((this as any)._lastTouchWorldX != null) {
 				this.drop = true; // Drop on release
 			}
-			(this as any)._lastTouchCoords = null; 
+			(this as any)._lastTouchWorldX = null; 
 		};
 
-		const md = (e: MouseEvent) => { press(e); };
-		const mm = (e: MouseEvent) => { move(e); };
+		const md = (e: MouseEvent) => { press(e.clientX); };
+		const mm = (e: MouseEvent) => { move(e.clientX); };
 		const mu = () => { up(); };
 		this.canvas.addEventListener('mousedown', md);
 		window.addEventListener('mousemove', mm);
 		window.addEventListener('mouseup', mu);
 		this.unsubscribeFns.push(() => { this.canvas.removeEventListener('mousedown', md); window.removeEventListener('mousemove', mm); window.removeEventListener('mouseup', mu); });
 
-		const td = (e: TouchEvent) => { if (e.changedTouches[0]) press(e); };
-		const tm = (e: TouchEvent) => { if (e.changedTouches[0]) move(e); };
+		const td = (e: TouchEvent) => { if (e.changedTouches[0]) press(e.changedTouches[0].clientX); };
+		const tm = (e: TouchEvent) => { if (e.changedTouches[0]) move(e.changedTouches[0].clientX); };
 		const tu = () => { up(); };
 		this.canvas.addEventListener('touchstart', td, { passive: true });
 		this.canvas.addEventListener('touchmove', tm, { passive: true });
@@ -68,7 +76,7 @@ export class Input {
 	}
 
 	consumeDrop(): boolean { const d = this.drop; this.drop = false; return d; }
-	getTouchCoords(): { x: number; y: number } | null { return (this as any)._lastTouchCoords ?? null; }
+	getTouchWorldX(): number | null { return (this as any)._lastTouchWorldX ?? null; }
 
 	dispose() { this.unsubscribeFns.forEach(fn => fn()); }
 }

@@ -8,6 +8,11 @@ const btnSound = document.getElementById('btn-sound') as HTMLDivElement;
 
 const game = new Game(canvas);
 
+// Initialize on DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+	game.start();
+});
+
 // buttons
 let paused = false;
 btnPause.addEventListener('click', () => {
@@ -30,7 +35,5 @@ window.addEventListener('pointerdown', () => { (game as any).audio?.unlock?.(); 
 
 // drop via tap/space
 window.addEventListener('keydown', (e) => { if (e.code === 'Space') e.preventDefault(); }, { passive: false });
-
-game.start();
 
 

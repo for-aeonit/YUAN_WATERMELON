@@ -6,15 +6,10 @@
     <meta name="theme-color" content="#0b0b12" />
     <title>Watermelon (Suika) Game</title>
     <style>
-      html, body { margin: 0; height: 100%; background: #0b1222; color: #fff; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
-      .game-wrap {
-        position: fixed; inset: 0;
-        display: flex; align-items: center; justify-content: center;
-        overflow: hidden;
-        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-      }
+      html, body { margin:0; height:100%; background:#0b1222; }
+      .game-wrap { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; overflow:hidden; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
       .canvas-wrap { position: relative; background: #0e0e18; box-shadow: 0 0 0 2px rgba(255,255,255,0.06) inset; border-radius: 12px; overflow: hidden; }
-      canvas#game { display: block; touch-action: none; user-select: none; background: transparent; }
+      canvas#game { display:block; touch-action:none; user-select:none; background:transparent; }
       .ui { position: absolute; inset: 0; pointer-events: none; }
       .hud { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; pointer-events: none; }
       .hud .left, .hud .right { display: flex; align-items: center; gap: 8px; }
@@ -32,7 +27,7 @@
       .bar.top { top: 0; }
       .bar.bottom { bottom: 0; }
     </style>
-    <script type="module" crossorigin src="/YUAN_WATERMELON/assets/index-DsQ8ZQ5m.js"></script>
+    <script type="module" crossorigin src="/YUAN_WATERMELON/assets/index-zPbr6wMS.js"></script>
   </head>
   <body>
     <div class="game-wrap">
@@ -60,6 +55,10 @@
             <button class="pill btn" id="btn-dialog-restart">Restart</button>
           </div>
         </div>
+      </div>
+      <div class="letterbox">
+        <div class="bar top" id="bar-top"></div>
+        <div class="bar bottom" id="bar-bottom"></div>
       </div>
     </div>
   </body>
