@@ -1,4 +1,4 @@
-﻿import { TIER_CONFIG, WORLD } from './config';
+﻿import { TIER_CONFIG, WORLD, VIEW } from './config';
 
 export interface RenderableBody {
 	id: number;
@@ -14,9 +14,6 @@ export class CanvasRenderer {
 	private images: Map<number, HTMLImageElement> = new Map();
 	private previewCtx: CanvasRenderingContext2D;
 	private backgroundImage: HTMLImageElement | null = null;
-	private scale = 1;
-	private offsetX = 0;
-	private offsetY = 0;
 
 	constructor(private canvas: HTMLCanvasElement) {
 		const ctx = canvas.getContext('2d');
@@ -59,75 +56,43 @@ export class CanvasRenderer {
 		await Promise.all([bgPromise, ...tierPromises]);
 	}
 
+	resizeCanvas(): void {
+		const dpr = Math.max(1, window.devicePixelRatio || 1);
+		const wrap = document.querySelector('.game-wrap');
+		const rect = wrap!.getBoundingClientRect();
+		const vw = Math.max(1, rect.width), vh = Math.max(1, rect.height);
+		const aspect = VIEW.worldW / VIEW.worldH; // 9/16
+
+		let cssW = vw, cssH = Math.floor(vw / aspect);
+		if (cssH > vh) { cssH = vh; cssW = Math.floor(vh * aspect); }
+
+		this.canvas.style.width = cssW + 'px';
+		this.canvas.style.height = cssH + 'px';
+		this.canvas.width = Math.round(cssW * dpr);
+		this.canvas.height = Math.round(cssH * dpr);
+
+		VIEW.scale = this.canvas.width / VIEW.worldW;   // device px per world unit
+		VIEW.offsetX = (vw - cssW) / 2;
+		VIEW.offsetY = (vh - cssH) / 2;
+	}
+
 	canvasPxToWorldX(px: number): number {
-		return (px - this.offsetX) / this.scale;
+		return px / VIEW.scale;
 	}
 
 	canvasPxToWorldY(py: number): number {
-		return (py - this.offsetY) / this.scale;
+		return py / VIEW.scale;
 	}
 
-	clientToWorldFromEvent(event: MouseEvent | TouchEvent, canvas: HTMLCanvasElement, scale: number): { x: number; y: number } {
-		const rect = canvas.getBoundingClientRect();
-		let clientX: number;
-		let clientY: number;
-
-		if ('touches' in event) {
-			// Touch event
-			clientX = event.touches[0]?.clientX ?? 0;
-			clientY = event.touches[0]?.clientY ?? 0;
-		} else {
-			// Mouse event
-			clientX = event.clientX;
-			clientY = event.clientY;
-		}
-
-		const canvasX = clientX - rect.left;
-		const canvasY = clientY - rect.top;
-		
-		return {
-			x: this.canvasPxToWorldX(canvasX),
-			y: this.canvasPxToWorldY(canvasY)
-		};
+	clientToWorldFromEvent(event: MouseEvent | TouchEvent): { x: number; y: number } {
+		const rect = this.canvas.getBoundingClientRect();
+		const cx = ('touches' in event && event.touches?.length) ? event.touches[0].clientX : (event as MouseEvent).clientX;
+		const cy = ('touches' in event && event.touches?.length) ? event.touches[0].clientY : (event as MouseEvent).clientY;
+		const xCss = cx - rect.left;
+		const yCss = cy - rect.top;
+		return { x: xCss / VIEW.scale, y: yCss / VIEW.scale };
 	}
 
-	resizeToFit(container: HTMLElement): void {
-		const containerRect = container.getBoundingClientRect();
-		const containerAspect = containerRect.width / containerRect.height;
-		const gameAspect = WORLD.logicalWidth / WORLD.logicalHeight;
-
-		let canvasWidth: number;
-		let canvasHeight: number;
-
-		if (containerAspect > gameAspect) {
-			canvasHeight = containerRect.height;
-			canvasWidth = canvasHeight * gameAspect;
-		} else {
-			canvasWidth = containerRect.width;
-			canvasHeight = canvasWidth / gameAspect;
-		}
-
-		this.canvas.width = canvasWidth;
-		this.canvas.height = canvasHeight;
-		this.canvas.style.width = `${canvasWidth}px`;
-		this.canvas.style.height = `${canvasHeight}px`;
-
-		this.scale = canvasWidth / WORLD.logicalWidth;
-		this.offsetX = (containerRect.width - canvasWidth) / 2;
-		this.offsetY = (containerRect.height - canvasHeight) / 2;
-
-		const barTop = document.getElementById('bar-top') as HTMLElement;
-		const barBottom = document.getElementById('bar-bottom') as HTMLElement;
-		
-		if (containerAspect > gameAspect) {
-			const barHeight = (containerRect.height - canvasHeight) / 2;
-			barTop.style.height = `${barHeight}px`;
-			barBottom.style.height = `${barHeight}px`;
-		} else {
-			barTop.style.height = '0px';
-			barBottom.style.height = '0px';
-		}
-	}
 
 	clear(): void {
 		if (this.backgroundImage) {
@@ -137,11 +102,11 @@ export class CanvasRenderer {
 		}
 	}
 
-	drawWorldBounds(width: number, height: number): void {
+	drawWorldBounds(): void {
 		this.ctx.save();
 		this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
 		this.ctx.lineWidth = 2;
-		this.ctx.strokeRect(0, 0, width, height);
+		this.ctx.strokeRect(0, 0, WORLD.width * VIEW.scale, WORLD.height * VIEW.scale);
 		this.ctx.restore();
 	}
 
@@ -150,20 +115,24 @@ export class CanvasRenderer {
 		
 		for (const body of bodies) {
 			const img = this.images.get(body.tierIndex);
+			const x = body.x * VIEW.scale;
+			const y = body.y * VIEW.scale;
+			const r = body.r * VIEW.scale;
+			
 			if (!img) {
 				this.ctx.fillStyle = this.getFruitColor(body.tierIndex);
 				this.ctx.beginPath();
-				this.ctx.arc(body.x, body.y, body.r, 0, Math.PI * 2);
+				this.ctx.arc(x, y, r, 0, Math.PI * 2);
 				this.ctx.fill();
 				continue;
 			}
 
 			this.ctx.save();
-			this.ctx.translate(body.x, body.y);
+			this.ctx.translate(x, y);
 			this.ctx.rotate(body.angle);
 			
-			const size = body.r * 2;
-			this.ctx.drawImage(img, -body.r, -body.r, size, size);
+			const size = r * 2;
+			this.ctx.drawImage(img, -r, -r, size, size);
 			
 			this.ctx.restore();
 		}
@@ -173,12 +142,16 @@ export class CanvasRenderer {
 
 	drawDropper(x: number, tierIndex: number): void {
 		const img = this.images.get(tierIndex);
+		const worldX = x * VIEW.scale;
+		const worldY = WORLD.spawnY * VIEW.scale;
+		const radius = TIER_CONFIG[tierIndex].radius * VIEW.scale;
+		
 		if (!img) {
 			this.ctx.save();
 			this.ctx.globalAlpha = 0.6;
 			this.ctx.fillStyle = this.getFruitColor(tierIndex);
 			this.ctx.beginPath();
-			this.ctx.arc(x, WORLD.spawnY, TIER_CONFIG[tierIndex].radius, 0, Math.PI * 2);
+			this.ctx.arc(worldX, worldY, radius, 0, Math.PI * 2);
 			this.ctx.fill();
 			this.ctx.restore();
 			return;
@@ -187,9 +160,8 @@ export class CanvasRenderer {
 		this.ctx.save();
 		this.ctx.globalAlpha = 0.6;
 		
-		const radius = TIER_CONFIG[tierIndex].radius;
 		const size = radius * 2;
-		this.ctx.drawImage(img, x - radius, WORLD.spawnY - radius, size, size);
+		this.ctx.drawImage(img, worldX - radius, worldY - radius, size, size);
 		
 		this.ctx.restore();
 	}
@@ -201,11 +173,13 @@ export class CanvasRenderer {
 			const progress = effect.t / effect.duration;
 			const alpha = 1 - progress;
 			const scale = 1 + progress * 0.5;
+			const x = effect.x * VIEW.scale;
+			const y = effect.y * VIEW.scale;
 			
 			this.ctx.globalAlpha = alpha;
 			this.ctx.fillStyle = '#ffffff';
 			this.ctx.beginPath();
-			this.ctx.arc(effect.x, effect.y, 8 * scale, 0, Math.PI * 2);
+			this.ctx.arc(x, y, 8 * scale * VIEW.scale, 0, Math.PI * 2);
 			this.ctx.fill();
 		}
 		

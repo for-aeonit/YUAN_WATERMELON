@@ -1,5 +1,5 @@
 import Matter, { Engine, World, Bodies, Body, Composite, Events, Detector } from 'matter-js';
-import { TIER_CONFIG, WORLD, PHYSICS, SCORING } from './config';
+import { TIER_CONFIG, WORLD, PHYSICS, SCORING, VIEW } from './config';
 import { CanvasRenderer, RenderableBody } from './renderer';
 import { Input } from './input';
 import { AudioManager } from './audio';
@@ -15,7 +15,7 @@ export class Game {
 	private bodies: FruitBody[] = [];
 	private ground!: Body; private leftWall!: Body; private rightWall!: Body; private ceiling!: Body;
 	private nextTierIndex = 0;
-	private dropperX = WORLD.logicalWidth / 2;
+	private dropperX = WORLD.width / 2;
 	private score = 0;
 	private best = 0;
 	private comboCount = 0;
@@ -47,7 +47,7 @@ export class Game {
 	private resetWorldBounds() {
 		Composite.clear(this.world, false, true);
 		this.bodies = [];
-		const W = WORLD.logicalWidth, H = WORLD.logicalHeight, T = WORLD.wallThickness;
+		const W = WORLD.width, H = WORLD.height, T = WORLD.wallThickness;
 		const halfW = W / 2;
 		// Ground - positioned at the bottom of the world
 		this.ground = Bodies.rectangle(halfW, H - T/2, W, T, { isStatic: true, friction: 0.3, restitution: 0.1 });
@@ -192,10 +192,10 @@ export class Game {
 
 	async start() {
 		await this.init();
-		const container = document.getElementById('canvas-wrap')!;
-		const resize = () => this.renderer.resizeToFit(container);
+		const resize = () => this.renderer.resizeCanvas();
 		resize(); // call resizeCanvas on start
 		window.addEventListener('resize', resize);
+		window.addEventListener('orientationchange', resize);
 		// fixed timestep loop at 60Hz
 		let acc = 0; let last = performance.now();
 		const step = 1000/60;
@@ -203,11 +203,11 @@ export class Game {
 			const now = performance.now(); let dt = now - last; last = now;
 			acc += dt; if (acc > 1000) acc = 1000; // spiral of death cap
 			const touchX = this.input.getTouchWorldX();
-			if (touchX != null) this.dropperX = Math.max(TIER_CONFIG[0].radius + 4, Math.min(WORLD.logicalWidth - TIER_CONFIG[0].radius - 4, touchX));
+			if (touchX != null) this.dropperX = Math.max(TIER_CONFIG[0].radius + 4, Math.min(WORLD.width - TIER_CONFIG[0].radius - 4, touchX));
 			else {
 				const speed = 420; // px/s
 				const dir = (this.input.right ? 1 : 0) - (this.input.left ? 1 : 0);
-				this.dropperX = Math.max(TIER_CONFIG[0].radius + 4, Math.min(WORLD.logicalWidth - TIER_CONFIG[0].radius - 4, this.dropperX + dir * (dt/1000) * speed));
+				this.dropperX = Math.max(TIER_CONFIG[0].radius + 4, Math.min(WORLD.width - TIER_CONFIG[0].radius - 4, this.dropperX + dir * (dt/1000) * speed));
 			}
 			if (this.input.consumeDrop()) this.dropFruit();
 			if (!this.paused && !this.gameOver) {
@@ -220,7 +220,7 @@ export class Game {
 			// render
 			this.renderer.clear();
 			const renderables: RenderableBody[] = this.bodies.map(b => ({ id: b.id, x: b.position.x, y: b.position.y, r: TIER_CONFIG[b.plugin.tierIndex].radius, angle: b.angle, tierIndex: b.plugin.tierIndex }));
-			this.renderer.drawWorldBounds(WORLD.logicalWidth, WORLD.logicalHeight);
+			this.renderer.drawWorldBounds();
 			this.renderer.drawBodies(renderables);
 			this.renderer.drawDropper(this.dropperX, this.nextTierIndex);
 			this.renderer.drawEffects(this.effects);

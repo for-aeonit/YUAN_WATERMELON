@@ -27,12 +27,19 @@ export const PHYSICS = {
 };
 
 export const WORLD = {
-	logicalWidth: 540, // base logical canvas units; scaled by responsive fit
-	logicalHeight: 960,
+	width: 900, // 9:16 aspect
+	height: 1600,
 	wallThickness: 40,
 	spawnY: 100, // spawn Y in WORLD units
-	maxHeightY: 110, // game over threshold line (deprecated)
-	gameOverLineY: 920, // game over line in WORLD units (WORLD.logicalHeight - 40)
+	gameOverLineY: 1560, // game over line in WORLD units (WORLD.height - 40)
+};
+
+export const VIEW = {
+	scale: 1,
+	offsetX: 0,
+	offsetY: 0,
+	worldW: WORLD.width,
+	worldH: WORLD.height,
 };
 
 export const SCORING = {

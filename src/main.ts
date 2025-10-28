@@ -31,6 +31,9 @@ window.addEventListener('pointerdown', () => { (game as any).audio?.unlock?.(); 
 // drop via tap/space
 window.addEventListener('keydown', (e) => { if (e.code === 'Space') e.preventDefault(); }, { passive: false });
 
-game.start();
+// start game when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+	game.start();
+});
 
 

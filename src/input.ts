@@ -34,7 +34,7 @@ export class Input {
 		};
 		const move = (ev: MouseEvent | TouchEvent) => {
 			if ((this as any)._lastTouchWorldX == null) return;
-			const p = this.renderer.clientToWorldFromEvent(ev, this.canvas, this.renderer.scale);
+			const p = this.renderer.clientToWorldFromEvent(ev);
 			(this as any)._lastTouchWorldX = p.x;
 		};
 		const up = () => { 
