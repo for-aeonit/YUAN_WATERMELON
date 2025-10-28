@@ -31,7 +31,7 @@ export class CanvasRenderer {
 	async loadImages(): Promise<void> {
 		const promises = TIER_CONFIG.map(async (tier, index) => {
 			const img = new Image();
-			img.src = import.meta.env.BASE_URL + tier.img;
+			img.src = `/${tier.img}`;
 			await new Promise<void>((resolve, reject) => {
 				img.onload = () => resolve();
 				img.onerror = () => reject(new Error(`Failed to load image: ${tier.img}`));
