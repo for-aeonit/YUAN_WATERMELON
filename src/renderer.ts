@@ -1,5 +1,4 @@
 ﻿import { TIER_CONFIG, WORLD } from './config';
-import { resolveAsset } from './utils/resolveAsset';
 
 export interface RenderableBody {
 	id: number;
@@ -14,10 +13,10 @@ export class CanvasRenderer {
 	private ctx: CanvasRenderingContext2D;
 	private images: Map<number, HTMLImageElement> = new Map();
 	private previewCtx: CanvasRenderingContext2D;
+	private backgroundImage: HTMLImageElement | null = null;
 	private scale = 1;
 	private offsetX = 0;
 	private offsetY = 0;
-	private backgroundImage: HTMLImageElement | null = null;
 
 	constructor(private canvas: HTMLCanvasElement) {
 		const ctx = canvas.getContext('2d');
@@ -30,64 +29,98 @@ export class CanvasRenderer {
 		this.previewCtx = previewCtx;
 	}
 
-	async loadImage(src: string): Promise<HTMLImageElement> {
-		return await new Promise<HTMLImageElement>((ok, err) => {
-			const i = new Image();
-			i.onload = () => ok(i);
-			i.onerror = (e) => { console.error('[IMG-404]', src, e); err(e); };
-			i.src = src;
-		});
+	private resolveAsset(path: string): string {
+		return `/assets/${path}`;
 	}
 
 	async loadImages(): Promise<void> {
 		// Load background image
-		try {
-			this.backgroundImage = await this.loadImage(resolveAsset('background/bg_01.png'));
-		} catch (e) {
-			console.warn('Background image not found, using fallback');
-		}
+		const bgPromise = new Promise<void>((resolve, reject) => {
+			const img = new Image();
+			img.src = this.resolveAsset('background/bg_01.png');
+			img.onload = () => {
+				this.backgroundImage = img;
+				resolve();
+			};
+			img.onerror = () => reject(new Error(`Failed to load background image: background/bg_01.png`));
+		});
 
-		// Load fruit sprites
-		const promises = TIER_CONFIG.map(async (tier, index) => {
-			const img = await this.loadImage(resolveAsset(tier.img));
+		// Load tier images
+		const tierPromises = TIER_CONFIG.map(async (tier, index) => {
+			const img = new Image();
+			img.src = this.resolveAsset(tier.img);
+			await new Promise<void>((resolve, reject) => {
+				img.onload = () => resolve();
+				img.onerror = () => reject(new Error(`Failed to load image: ${tier.img}`));
+			});
 			this.images.set(index, img);
 		});
-		await Promise.all(promises);
+
+		await Promise.all([bgPromise, ...tierPromises]);
 	}
 
 	canvasPxToWorldX(px: number): number {
 		return (px - this.offsetX) / this.scale;
 	}
 
-	resizeCanvas(): void {
-		const WORLD = { width: 900, height: 1600 };
-		const VIEW = { scale: 1 };
+	canvasPxToWorldY(py: number): number {
+		return (py - this.offsetY) / this.scale;
+	}
 
-		const dpr = Math.max(1, window.devicePixelRatio || 1);
-		const wrap = document.querySelector('.game-wrap') as HTMLElement;
-		const rect = wrap.getBoundingClientRect();
-		const vw = Math.max(1, rect.width), vh = Math.max(1, rect.height);
-		const aspect = WORLD.width / WORLD.height;
+	clientToWorldFromEvent(event: MouseEvent | TouchEvent, canvas: HTMLCanvasElement, scale: number): { x: number; y: number } {
+		const rect = canvas.getBoundingClientRect();
+		let clientX: number;
+		let clientY: number;
 
-		let cssW = vw, cssH = Math.floor(vw / aspect);
-		if (cssH > vh) { cssH = vh; cssW = Math.floor(vh * aspect); }
+		if ('touches' in event) {
+			// Touch event
+			clientX = event.touches[0]?.clientX ?? 0;
+			clientY = event.touches[0]?.clientY ?? 0;
+		} else {
+			// Mouse event
+			clientX = event.clientX;
+			clientY = event.clientY;
+		}
 
-		this.canvas.style.width = cssW + 'px';
-		this.canvas.style.height = cssH + 'px';
-		this.canvas.width = Math.round(cssW * dpr);
-		this.canvas.height = Math.round(cssH * dpr);
+		const canvasX = clientX - rect.left;
+		const canvasY = clientY - rect.top;
+		
+		return {
+			x: this.canvasPxToWorldX(canvasX),
+			y: this.canvasPxToWorldY(canvasY)
+		};
+	}
 
-		VIEW.scale = this.canvas.width / WORLD.width;
-		this.scale = VIEW.scale;
-		this.offsetX = (rect.width - cssW) / 2;
-		this.offsetY = (rect.height - cssH) / 2;
+	resizeToFit(container: HTMLElement): void {
+		const containerRect = container.getBoundingClientRect();
+		const containerAspect = containerRect.width / containerRect.height;
+		const gameAspect = WORLD.logicalWidth / WORLD.logicalHeight;
 
-		// Update letterbox bars
+		let canvasWidth: number;
+		let canvasHeight: number;
+
+		if (containerAspect > gameAspect) {
+			canvasHeight = containerRect.height;
+			canvasWidth = canvasHeight * gameAspect;
+		} else {
+			canvasWidth = containerRect.width;
+			canvasHeight = canvasWidth / gameAspect;
+		}
+
+		this.canvas.width = canvasWidth;
+		this.canvas.height = canvasHeight;
+		this.canvas.style.width = `${canvasWidth}px`;
+		this.canvas.style.height = `${canvasHeight}px`;
+
+		this.scale = canvasWidth / WORLD.logicalWidth;
+		this.offsetX = (containerRect.width - canvasWidth) / 2;
+		this.offsetY = (containerRect.height - canvasHeight) / 2;
+
 		const barTop = document.getElementById('bar-top') as HTMLElement;
 		const barBottom = document.getElementById('bar-bottom') as HTMLElement;
 		
-		if (rect.width / rect.height > aspect) {
-			const barHeight = (rect.height - cssH) / 2;
+		if (containerAspect > gameAspect) {
+			const barHeight = (containerRect.height - canvasHeight) / 2;
 			barTop.style.height = `${barHeight}px`;
 			barBottom.style.height = `${barHeight}px`;
 		} else {

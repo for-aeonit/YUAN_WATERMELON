@@ -24,22 +24,24 @@ export class Game {
 	private overTimer = 0;
 	private paused = false;
 	private effects: { x: number; y: number; t: number; duration: number }[] = [];
+	private hasDroppedFruit = false; // guard to prevent instant game over
 
 	constructor(private canvas: HTMLCanvasElement) {
 		this.engine = Engine.create({ gravity: { x: 0, y: PHYSICS.gravityY, scale: 0.001 } });
 		this.world = this.engine.world;
 		this.renderer = new CanvasRenderer(canvas);
-		this.input = new Input(canvas, (px) => this.renderer.canvasPxToWorldX(px));
+		this.input = new Input(canvas, (px) => this.renderer.canvasPxToWorldX(px), this.renderer);
 		this.audio = new AudioManager();
 		try { this.best = Number(localStorage.getItem('best-score') || '0') || 0; } catch {}
 	}
 
 	async init() {
-		await this.renderer.loadImages();
-		this.resetWorldBounds();
+		await this.renderer.loadImages(); // preload images
+		this.resetWorldBounds(); // reset physics/world
 		this.wireEvents();
 		this.rollNext();
 		this.updateHUD();
+		// state is already RUNNING (not GAME_OVER) by default
 	}
 
 	private resetWorldBounds() {
@@ -139,13 +141,21 @@ export class Game {
 		if (this.gameOver || this.paused) return;
 		const tier = this.nextTierIndex;
 		this.createFruit(tier, this.dropperX, WORLD.spawnY);
+		this.hasDroppedFruit = true; // mark that we've dropped at least one fruit
 		this.rollNext();
 	}
 
 	private updateGameOver(dt: number) {
+		// Guard: don't check game over until at least one fruit has been dropped
+		if (!this.hasDroppedFruit) return;
+		
 		let anyOver = false;
 		for (const b of this.bodies) {
-			if (b.position.y - TIER_CONFIG[b.plugin.tierIndex].radius < WORLD.maxHeightY) { anyOver = true; break; }
+			// Check if fruit's bottom edge (position.y + radius) is above the game over line
+			if (b.position.y + TIER_CONFIG[b.plugin.tierIndex].radius > WORLD.gameOverLineY) { 
+				anyOver = true; 
+				break; 
+			}
 		}
 		if (anyOver) {
 			this.overTimer += dt;
@@ -164,8 +174,15 @@ export class Game {
 	}
 
 	restart() {
-		this.gameOver = false; this.overTimer = 0; this.score = 0; this.comboCount = 0; this.lastMergeTime = 0;
-		this.resetWorldBounds(); this.rollNext(); this.updateHUD();
+		this.gameOver = false; 
+		this.overTimer = 0; 
+		this.score = 0; 
+		this.comboCount = 0; 
+		this.lastMergeTime = 0;
+		this.hasDroppedFruit = false; // reset the guard
+		this.resetWorldBounds(); 
+		this.rollNext(); 
+		this.updateHUD();
 		const dialog = document.getElementById('dialog')!; dialog.classList.add('hidden');
 	}
 
@@ -175,13 +192,10 @@ export class Game {
 
 	async start() {
 		await this.init();
-		const resize = () => {
-			this.renderer.resizeCanvas();
-			this.input.updateScale(this.renderer.scale);
-		};
-		resize();
+		const container = document.getElementById('canvas-wrap')!;
+		const resize = () => this.renderer.resizeToFit(container);
+		resize(); // call resizeCanvas on start
 		window.addEventListener('resize', resize);
-		window.addEventListener('orientationchange', resize);
 		// fixed timestep loop at 60Hz
 		let acc = 0; let last = performance.now();
 		const step = 1000/60;

@@ -1,3 +1,5 @@
+import { CanvasRenderer } from './renderer';
+
 export class Input {
 	left = false;
 	right = false;
@@ -5,23 +7,9 @@ export class Input {
 	axisX = 0; // -1..1
 
 	private unsubscribeFns: (() => void)[] = [];
-	private VIEW = { scale: 1 };
 
-	constructor(private canvas: HTMLCanvasElement, private mapToWorldX: (px: number) => number) {
+	constructor(private canvas: HTMLCanvasElement, private mapToWorldX: (px: number) => number, private renderer: CanvasRenderer) {
 		this.init();
-	}
-
-	updateScale(scale: number) {
-		this.VIEW.scale = scale;
-	}
-
-	clientToWorld(ev: MouseEvent | TouchEvent): { x: number; y: number } {
-		const c = document.getElementById('game') as HTMLCanvasElement;
-		const r = c.getBoundingClientRect();
-		const cx = ('touches' in ev && ev.touches?.length) ? ev.touches[0].clientX : (ev as MouseEvent).clientX;
-		const cy = ('touches' in ev && ev.touches?.length) ? ev.touches[0].clientY : (ev as MouseEvent).clientY;
-		const xCss = cx - r.left, yCss = cy - r.top;
-		return { x: xCss / this.VIEW.scale, y: yCss / this.VIEW.scale };
 	}
 
 	private init() {
@@ -44,12 +32,10 @@ export class Input {
 			(this as any)._lastTouchWorldX = worldX;
 			// Don't drop immediately on press, wait for release
 		};
-		const move = (clientX: number) => {
+		const move = (ev: MouseEvent | TouchEvent) => {
 			if ((this as any)._lastTouchWorldX == null) return;
-			const rect = this.canvas.getBoundingClientRect();
-			const x = clientX - rect.left;
-			const worldX = this.mapToWorldX(x);
-			(this as any)._lastTouchWorldX = worldX;
+			const p = this.renderer.clientToWorldFromEvent(ev, this.canvas, this.renderer.scale);
+			(this as any)._lastTouchWorldX = p.x;
 		};
 		const up = () => { 
 			if ((this as any)._lastTouchWorldX != null) {
@@ -59,7 +45,7 @@ export class Input {
 		};
 
 		const md = (e: MouseEvent) => { press(e.clientX); };
-		const mm = (e: MouseEvent) => { move(e.clientX); };
+		const mm = (e: MouseEvent) => { move(e); };
 		const mu = () => { up(); };
 		this.canvas.addEventListener('mousedown', md);
 		window.addEventListener('mousemove', mm);
@@ -67,7 +53,7 @@ export class Input {
 		this.unsubscribeFns.push(() => { this.canvas.removeEventListener('mousedown', md); window.removeEventListener('mousemove', mm); window.removeEventListener('mouseup', mu); });
 
 		const td = (e: TouchEvent) => { if (e.changedTouches[0]) press(e.changedTouches[0].clientX); };
-		const tm = (e: TouchEvent) => { if (e.changedTouches[0]) move(e.changedTouches[0].clientX); };
+		const tm = (e: TouchEvent) => { if (e.changedTouches[0]) move(e); };
 		const tu = () => { up(); };
 		this.canvas.addEventListener('touchstart', td, { passive: true });
 		this.canvas.addEventListener('touchmove', tm, { passive: true });
