@@ -17,6 +17,9 @@ export class CanvasRenderer {
 	private offsetX = 0;
 	private offsetY = 0;
 
+	// Fixed aspect ratio constants
+	private readonly WORLD_ASPECT = 9/16; // width / height
+
 	constructor(private canvas: HTMLCanvasElement) {
 		const ctx = canvas.getContext('2d');
 		if (!ctx) throw new Error('Could not get 2D context');
@@ -45,51 +48,40 @@ export class CanvasRenderer {
 		return (px - this.offsetX) / this.scale;
 	}
 
-	resizeToFit(container: HTMLElement): void {
-		const containerRect = container.getBoundingClientRect();
-		const containerAspect = containerRect.width / containerRect.height;
-		const gameAspect = WORLD.logicalWidth / WORLD.logicalHeight;
-
-		let canvasWidth: number;
-		let canvasHeight: number;
-
-		// Ensure minimum dimensions for mobile
-		const minWidth = Math.min(320, containerRect.width);
-		const minHeight = Math.min(568, containerRect.height);
-
-		if (containerAspect > gameAspect) {
-			// Container is wider than game aspect ratio - fit height
-			canvasHeight = Math.max(minHeight, containerRect.height);
-			canvasWidth = canvasHeight * gameAspect;
-		} else {
-			// Container is taller than game aspect ratio - fit width
-			canvasWidth = Math.max(minWidth, containerRect.width);
-			canvasHeight = canvasWidth / gameAspect;
-		}
-
-		// Set canvas dimensions
-		this.canvas.width = canvasWidth;
-		this.canvas.height = canvasHeight;
-		this.canvas.style.width = `${canvasWidth}px`;
-		this.canvas.style.height = `${canvasHeight}px`;
-
-		// Calculate scaling and offsets
-		this.scale = canvasWidth / WORLD.logicalWidth;
-		this.offsetX = (containerRect.width - canvasWidth) / 2;
-		this.offsetY = (containerRect.height - canvasHeight) / 2;
-
-		// Update letterbox bars for aspect ratio differences
-		const barTop = document.getElementById('bar-top') as HTMLElement;
-		const barBottom = document.getElementById('bar-bottom') as HTMLElement;
+	resizeCanvas(): void {
+		const dpr = Math.max(1, window.devicePixelRatio || 1);
+		const vw = window.innerWidth;
+		const vh = window.innerHeight;
 		
-		if (containerAspect > gameAspect) {
-			const barHeight = Math.max(0, (containerRect.height - canvasHeight) / 2);
-			barTop.style.height = `${barHeight}px`;
-			barBottom.style.height = `${barHeight}px`;
-		} else {
-			barTop.style.height = '0px';
-			barBottom.style.height = '0px';
+		// Compute CSS size keeping 9:16 inside viewport with letterbox/pillarbox
+		let cssW = vw;
+		let cssH = Math.floor(vw / this.WORLD_ASPECT);
+		
+		if (cssH > vh) {
+			cssH = vh;
+			cssW = Math.floor(vh * this.WORLD_ASPECT);
 		}
+		
+		this.canvas.style.width = cssW + 'px';
+		this.canvas.style.height = cssH + 'px';
+		this.canvas.width = Math.round(cssW * dpr);
+		this.canvas.height = Math.round(cssH * dpr);
+		
+		this.scale = this.canvas.width / WORLD.logicalWidth; // world→device scale
+		this.offsetX = (vw - cssW) / 2; // for input mapping
+		this.offsetY = (vh - cssH) / 2;
+	}
+
+	getScale(): number {
+		return this.scale;
+	}
+
+	getOffsetX(): number {
+		return this.offsetX;
+	}
+
+	getOffsetY(): number {
+		return this.offsetY;
 	}
 
 	clear(): void {
