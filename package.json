@@ -1,0 +1,19 @@
+{
+  "name": "suika-watermelon",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --open",
+    "build": "vite build",
+    "preview": "vite preview --port 4173"
+  },
+  "dependencies": {
+    "matter-js": "^0.19.0"
+  },
+  "devDependencies": {
+    "@types/matter-js": "^0.20.2",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.0"
+  }
+}
