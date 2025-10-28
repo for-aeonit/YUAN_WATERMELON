@@ -1,4 +1,4 @@
-﻿import { TIER_CONFIG, WORLD } from './config';
+﻿import { TIER_CONFIG, WORLD, resolveAsset } from './config';
 
 export interface RenderableBody {
 	id: number;
@@ -31,7 +31,7 @@ export class CanvasRenderer {
 	async loadImages(): Promise<void> {
 		const promises = TIER_CONFIG.map(async (tier, index) => {
 			const img = new Image();
-			img.src = `/${tier.img}`;
+			img.src = tier.img;
 			await new Promise<void>((resolve, reject) => {
 				img.onload = () => resolve();
 				img.onerror = () => reject(new Error(`Failed to load image: ${tier.img}`));
