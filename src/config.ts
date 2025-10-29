@@ -48,4 +48,10 @@ export const SCORING = {
 	comboWindowMs: 1200,
 };
 
+export const FRUIT_SIZE_MULTIPLIER = 2.0; // ← change this one number later if needed
+
+export function getFruitRadius(tier: number): number {
+	return TIER_CONFIG[tier].radius * FRUIT_SIZE_MULTIPLIER;
+}
+
 

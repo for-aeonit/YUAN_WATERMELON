@@ -1,5 +1,5 @@
 import Matter, { Engine, World, Bodies, Body, Composite, Events, Detector } from 'matter-js';
-import { TIER_CONFIG, WORLD, PHYSICS, SCORING, VIEW } from './config';
+import { TIER_CONFIG, WORLD, PHYSICS, SCORING, VIEW, getFruitRadius } from './config';
 import { CanvasRenderer, RenderableBody } from './renderer';
 import { Input } from './input';
 import { AudioManager } from './audio';
@@ -113,7 +113,8 @@ export class Game {
 
 	private createFruit(tierIndex: number, x: number, y: number): FruitBody {
 		const cfg = TIER_CONFIG[tierIndex];
-		const body = Bodies.circle(x, y, cfg.radius, {
+		const r = getFruitRadius(tierIndex);
+		const body = Bodies.circle(x, y, r, {
 			restitution: PHYSICS.restitution,
 			friction: PHYSICS.friction,
 			frictionAir: 0.002,
@@ -145,7 +146,7 @@ export class Game {
 	private dropFruit() {
 		if (this.gameOver || this.paused) return;
 		const tier = this.nextTierIndex;
-		const radius = TIER_CONFIG[tier].radius;
+		const radius = getFruitRadius(tier);
 		const leftWall = radius + 4;
 		const rightWall = WORLD.width - radius - 4;
 		const clampedX = Math.max(leftWall, Math.min(rightWall, this.dropperX));
@@ -161,7 +162,7 @@ export class Game {
 		let anyOver = false;
 		for (const b of this.bodies) {
 			// Check if fruit's TOP edge (position.y - radius) crosses above the game over line
-			const fruitTop = b.position.y - TIER_CONFIG[b.plugin.tierIndex].radius;
+			const fruitTop = b.position.y - getFruitRadius(b.plugin.tierIndex);
 			if (fruitTop <= WORLD.gameOverLineY) { 
 				anyOver = true; 
 				break; 
@@ -237,11 +238,11 @@ export class Game {
 			const now = performance.now(); let dt = now - last; last = now;
 			acc += dt; if (acc > 1000) acc = 1000; // spiral of death cap
 			const touchX = this.input.getTouchWorldX();
-			if (touchX != null) this.dropperX = Math.max(TIER_CONFIG[0].radius + 4, Math.min(WORLD.width - TIER_CONFIG[0].radius - 4, touchX));
+			if (touchX != null) this.dropperX = Math.max(getFruitRadius(0) + 4, Math.min(WORLD.width - getFruitRadius(0) - 4, touchX));
 			else {
 				const speed = 420; // px/s
 				const dir = (this.input.right ? 1 : 0) - (this.input.left ? 1 : 0);
-				this.dropperX = Math.max(TIER_CONFIG[0].radius + 4, Math.min(WORLD.width - TIER_CONFIG[0].radius - 4, this.dropperX + dir * (dt/1000) * speed));
+				this.dropperX = Math.max(getFruitRadius(0) + 4, Math.min(WORLD.width - getFruitRadius(0) - 4, this.dropperX + dir * (dt/1000) * speed));
 			}
 			if (this.input.consumeDrop()) this.dropFruit();
 			if (!this.paused && !this.gameOver) {
@@ -253,7 +254,7 @@ export class Game {
 			this.effects = this.effects.filter(e => e.t < e.duration);
 			// render
 			this.renderer.clear();
-			const renderables: RenderableBody[] = this.bodies.map(b => ({ id: b.id, x: b.position.x, y: b.position.y, r: TIER_CONFIG[b.plugin.tierIndex].radius, angle: b.angle, tierIndex: b.plugin.tierIndex }));
+			const renderables: RenderableBody[] = this.bodies.map(b => ({ id: b.id, x: b.position.x, y: b.position.y, r: getFruitRadius(b.plugin.tierIndex), angle: b.angle, tierIndex: b.plugin.tierIndex }));
 			this.renderer.drawWorldBounds();
 			this.renderer.drawGameOverLine();
 			this.renderer.drawBodies(renderables);

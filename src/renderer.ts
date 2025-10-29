@@ -1,4 +1,4 @@
-﻿import { TIER_CONFIG, WORLD, VIEW } from './config';
+﻿import { TIER_CONFIG, WORLD, VIEW, getFruitRadius } from './config';
 import { resolveAsset } from './utils/resolveAsset';
 
 export interface RenderableBody {
@@ -130,14 +130,15 @@ export class CanvasRenderer {
 		
 		for (const body of bodies) {
 			const img = this.images.get(body.tierIndex);
+			const r = getFruitRadius(body.tierIndex);
 			const x = body.x * VIEW.scale;
 			const y = body.y * VIEW.scale;
-			const r = body.r * VIEW.scale;
+			const scaledR = r * VIEW.scale;
 			
 			if (!img) {
 				this.ctx.fillStyle = this.getFruitColor(body.tierIndex);
 				this.ctx.beginPath();
-				this.ctx.arc(x, y, r, 0, Math.PI * 2);
+				this.ctx.arc(x, y, scaledR, 0, Math.PI * 2);
 				this.ctx.fill();
 				continue;
 			}
@@ -146,8 +147,8 @@ export class CanvasRenderer {
 			this.ctx.translate(x, y);
 			this.ctx.rotate(body.angle);
 			
-			const size = r * 2;
-			this.ctx.drawImage(img, -r, -r, size, size);
+			const size = scaledR * 2;
+			this.ctx.drawImage(img, -scaledR, -scaledR, size, size);
 			
 			this.ctx.restore();
 		}
@@ -157,9 +158,10 @@ export class CanvasRenderer {
 
 	drawDropper(x: number, tierIndex: number): void {
 		const img = this.images.get(tierIndex);
+		const r = getFruitRadius(tierIndex);
 		const worldX = x * VIEW.scale;
 		const worldY = WORLD.spawnY * VIEW.scale;
-		const radius = TIER_CONFIG[tierIndex].radius * VIEW.scale;
+		const radius = r * VIEW.scale;
 		
 		if (!img) {
 			this.ctx.save();
