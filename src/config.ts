@@ -31,7 +31,7 @@ export const WORLD = {
 	height: 1600,
 	wallThickness: 40,
 	spawnY: 100, // spawn Y in WORLD units
-	gameOverLineY: 1560, // game over line in WORLD units (WORLD.height - 40)
+	gameOverLineY: Math.round(1600 * (3/16)), // game over line ~3/16 from TOP (Suika-style)
 };
 
 export const VIEW = {

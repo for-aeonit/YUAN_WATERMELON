@@ -48,6 +48,10 @@ export class Game {
 	private resetWorldBounds() {
 		Composite.clear(this.world, false, true);
 		this.bodies = [];
+		this.rebuildWorldBounds();
+	}
+
+	private rebuildWorldBounds() {
 		const W = WORLD.width, H = WORLD.height, T = WORLD.wallThickness;
 		const halfW = W / 2;
 		// Ground - positioned at the bottom of the world
@@ -156,8 +160,9 @@ export class Game {
 		
 		let anyOver = false;
 		for (const b of this.bodies) {
-			// Check if fruit's bottom edge (position.y + radius) is above the game over line
-			if (b.position.y + TIER_CONFIG[b.plugin.tierIndex].radius > WORLD.gameOverLineY) { 
+			// Check if fruit's TOP edge (position.y - radius) crosses above the game over line
+			const fruitTop = b.position.y - TIER_CONFIG[b.plugin.tierIndex].radius;
+			if (fruitTop <= WORLD.gameOverLineY) { 
 				anyOver = true; 
 				break; 
 			}
@@ -205,7 +210,10 @@ export class Game {
 	setPaused(p: boolean) { this.paused = p; }
 	setMuted(m: boolean) { this.audio.setMuted(m); }
 	getMuted(): boolean { return this.audio.isMuted; }
-	resizeCanvas() { this.renderer.resizeCanvas(); }
+	resizeCanvas() { 
+		this.renderer.resizeCanvas(); 
+		this.rebuildWorldBounds(); // Rebuild physics bounds on resize
+	}
 
 	async start() {
 		await this.init();

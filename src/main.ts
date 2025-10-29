@@ -33,7 +33,7 @@ window.addEventListener('keydown', (e) => { if (e.code === 'Space') e.preventDef
 
 // Initialize game function
 function initGame() {
-	// Call resizeCanvas once
+	// Call resizeCanvas first (this will also call rebuildWorldBounds)
 	game.resizeCanvas();
 	
 	// Preload images/sounds and reset game state

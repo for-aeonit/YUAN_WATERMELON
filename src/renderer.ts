@@ -68,7 +68,8 @@ export class CanvasRenderer {
 		this.canvas.width = Math.round(cssW * dpr);
 		this.canvas.height = Math.round(cssH * dpr);
 
-		VIEW.scale = this.canvas.width / VIEW.worldW;   // device px per world unit
+		// Use MIN to avoid "half area" on tall/narrow devices
+		VIEW.scale = Math.min(this.canvas.width / VIEW.worldW, this.canvas.height / VIEW.worldH);
 		VIEW.offsetX = (vw - cssW) / 2;
 		VIEW.offsetY = (vh - cssH) / 2;
 	}
@@ -92,6 +93,10 @@ export class CanvasRenderer {
 
 
 	clear(): void {
+		// Reset canvas transforms to avoid double-scaling
+		this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+		
+		// Draw background to pixel canvas size
 		if (this.backgroundImage) {
 			this.ctx.drawImage(this.backgroundImage, 0, 0, this.canvas.width, this.canvas.height);
 		} else {
