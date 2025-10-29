@@ -36,6 +36,7 @@ export const WORLD = {
 
 export const VIEW = {
 	scale: 1,
+	cssScale: 1, // CSS px per world unit (used for input)
 	offsetX: 0,
 	offsetY: 0,
 	worldW: WORLD.width,

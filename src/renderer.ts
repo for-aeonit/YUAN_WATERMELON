@@ -70,6 +70,7 @@ export class CanvasRenderer {
 
 		// Use MIN to avoid "half area" on tall/narrow devices
 		VIEW.scale = Math.min(this.canvas.width / VIEW.worldW, this.canvas.height / VIEW.worldH);
+		VIEW.cssScale = (parseFloat(this.canvas.style.width) || cssW) / VIEW.worldW; // CSS px per world unit (used for input)
 		VIEW.offsetX = (vw - cssW) / 2;
 		VIEW.offsetY = (vh - cssH) / 2;
 	}
@@ -88,7 +89,7 @@ export class CanvasRenderer {
 		const cy = ('touches' in event && event.touches?.length) ? event.touches[0].clientY : (event as MouseEvent).clientY;
 		const xCss = cx - rect.left;
 		const yCss = cy - rect.top;
-		return { x: xCss / VIEW.scale, y: yCss / VIEW.scale };
+		return { x: xCss / VIEW.cssScale, y: yCss / VIEW.cssScale };
 	}
 
 

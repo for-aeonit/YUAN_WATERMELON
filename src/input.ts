@@ -27,14 +27,14 @@ export class Input {
 		this.unsubscribeFns.push(() => { window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku); });
 
 		const press = (ev: MouseEvent | TouchEvent) => {
-			const p = clientToWorldFromEvent(ev, this.canvas, VIEW.scale);
+			const p = clientToWorldFromEvent(ev, this.canvas, VIEW.cssScale);
 			this.axisX = 0; // we use absolute mapping; movement handled by game
 			(this as any)._lastTouchWorldX = p.x;
 			// Don't drop immediately on press, wait for release
 		};
 		const move = (ev: MouseEvent | TouchEvent) => {
 			if ((this as any)._lastTouchWorldX == null) return;
-			const p = clientToWorldFromEvent(ev, this.canvas, VIEW.scale);
+			const p = clientToWorldFromEvent(ev, this.canvas, VIEW.cssScale);
 			(this as any)._lastTouchWorldX = p.x;
 		};
 		const up = () => { 
