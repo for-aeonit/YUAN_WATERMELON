@@ -1,10 +1,154 @@
-import Matter, { Engine, World, Bodies, Body, Composite, Events, Detector } from 'matter-js';
+import Matter, { Engine, World, Bodies, Body, Composite, Events, Detector, Query } from 'matter-js';
 import { TIER_CONFIG, WORLD, PHYSICS, SCORING, VIEW, getFruitRadius } from './config';
 import { CanvasRenderer, RenderableBody } from './renderer';
 import { Input } from './input';
 import { AudioManager } from './audio';
+import { MERGE_EPSILON_RATIO, MERGE_COOLDOWN_MS, MERGE_MAX_REL_V } from './game/merge';
 
-type FruitBody = Body & { plugin: { tierIndex: number; merging?: boolean } };
+type FruitBody = Body & { 
+	plugin: { tierIndex: number; merging?: boolean };
+	fruit: { tier: number; radius: number; lastMergeAt: number | null };
+};
+
+interface MergePair {
+	a: FruitBody;
+	b: FruitBody;
+}
+
+class MergeManager {
+	private mergeCandidates: MergePair[] = [];
+	private mergedThisFrame = new Set<number>();
+
+	collectCandidates(bodies: FruitBody[], world: World, engine: Engine) {
+		this.mergeCandidates = [];
+		this.mergedThisFrame.clear();
+
+		// Collect from collision events
+		Events.on(engine, 'collisionStart', (ev) => {
+			for (const pair of ev.pairs) {
+				const a = pair.bodyA as FruitBody;
+				const b = pair.bodyB as FruitBody;
+				if (this.isValidMergePair(a, b)) {
+					this.mergeCandidates.push({ a, b });
+				}
+			}
+		});
+
+		Events.on(engine, 'collisionActive', (ev) => {
+			for (const pair of ev.pairs) {
+				const a = pair.bodyA as FruitBody;
+				const b = pair.bodyB as FruitBody;
+				if (this.isValidMergePair(a, b)) {
+					this.mergeCandidates.push({ a, b });
+				}
+			}
+		});
+
+		// Backup proximity scan
+		for (const body of bodies) {
+			if (body.fruit?.tier == null) continue;
+			
+			const searchRadius = body.fruit.radius * 2;
+			const region = {
+				min: { x: body.position.x - searchRadius, y: body.position.y - searchRadius },
+				max: { x: body.position.x + searchRadius, y: body.position.y + searchRadius }
+			};
+			
+			const nearby = Query.region(world.bodies, region);
+			for (const other of nearby) {
+				const otherBody = other as FruitBody;
+				if (otherBody !== body && this.isValidMergePair(body, otherBody)) {
+					this.mergeCandidates.push({ a: body, b: otherBody });
+				}
+			}
+		}
+	}
+
+	private isValidMergePair(a: FruitBody, b: FruitBody): boolean {
+		if (!a.fruit || !b.fruit) return false;
+		if (a.fruit.tier !== b.fruit.tier) return false;
+		if (a.plugin?.merging || b.plugin?.merging) return false;
+		
+		const now = performance.now();
+		if (a.fruit.lastMergeAt && (now - a.fruit.lastMergeAt) < MERGE_COOLDOWN_MS) return false;
+		if (b.fruit.lastMergeAt && (now - b.fruit.lastMergeAt) < MERGE_COOLDOWN_MS) return false;
+
+		const rMin = Math.min(a.fruit.radius, b.fruit.radius);
+		const mergeEps = rMin * MERGE_EPSILON_RATIO;
+		const dist = Math.sqrt(
+			(a.position.x - b.position.x) ** 2 + 
+			(a.position.y - b.position.y) ** 2
+		);
+		const needOverlap = (a.fruit.radius + b.fruit.radius) - mergeEps;
+		
+		const relVx = a.velocity.x - b.velocity.x;
+		const relVy = a.velocity.y - b.velocity.y;
+		const relV = Math.sqrt(relVx * relVx + relVy * relVy);
+
+		return dist <= needOverlap && relV <= MERGE_MAX_REL_V;
+	}
+
+	process(world: World, bodies: FruitBody[], createFruit: (tier: number, x: number, y: number, vx: number, vy: number) => FruitBody, removeFruitBody: (body: FruitBody) => void): boolean {
+		let hasMerges = false;
+		
+		while (true) {
+			const pairs: MergePair[] = [];
+			const usedBodies = new Set<number>();
+
+			// Build unique, non-overlapping merge pairs
+			for (const pair of this.mergeCandidates) {
+				if (usedBodies.has(pair.a.id) || usedBodies.has(pair.b.id)) continue;
+				if (this.mergedThisFrame.has(pair.a.id) || this.mergedThisFrame.has(pair.b.id)) continue;
+				if (pair.a.plugin?.merging || pair.b.plugin?.merging) continue;
+
+				const now = performance.now();
+				if (pair.a.fruit.lastMergeAt && (now - pair.a.fruit.lastMergeAt) < MERGE_COOLDOWN_MS) continue;
+				if (pair.b.fruit.lastMergeAt && (now - pair.b.fruit.lastMergeAt) < MERGE_COOLDOWN_MS) continue;
+
+				// Prefer smaller bodyId to avoid conflicts
+				const smallerId = Math.min(pair.a.id, pair.b.id);
+				if (usedBodies.has(smallerId)) continue;
+
+				pairs.push(pair);
+				usedBodies.add(pair.a.id);
+				usedBodies.add(pair.b.id);
+			}
+
+			if (pairs.length === 0) break;
+
+			// Process all pairs in this iteration
+			for (const pair of pairs) {
+				const { a, b } = pair;
+				const tier = a.fruit.tier;
+				const newTier = tier + 1;
+
+				if (newTier >= TIER_CONFIG.length) continue;
+
+				const x = (a.position.x + b.position.x) / 2;
+				const y = (a.position.y + b.position.y) / 2;
+				const vx = (a.velocity.x + b.velocity.x) / 2;
+				const vy = (a.velocity.y + b.velocity.y) / 2;
+
+				// Remove old bodies AFTER creating new to avoid gaps
+				removeFruitBody(a);
+				removeFruitBody(b);
+
+				// Create new fruit with same coordinate space and new tier
+				const newFruit = createFruit(newTier, x, y, vx, vy);
+				newFruit.fruit.lastMergeAt = performance.now();
+
+				// Mark as merged this frame
+				this.mergedThisFrame.add(a.id);
+				this.mergedThisFrame.add(b.id);
+				this.mergedThisFrame.add(newFruit.id);
+
+				hasMerges = true;
+			}
+		}
+
+		return hasMerges;
+	}
+}
 
 export class Game {
 	private engine: Engine;
@@ -26,6 +170,7 @@ export class Game {
 	private effects: { x: number; y: number; t: number; duration: number }[] = [];
 	private hasDroppedFruit = false; // guard to prevent instant game over
 	private state: 'RUNNING' | 'GAME_OVER' = 'RUNNING';
+	private mergeManager = new MergeManager();
 
 	constructor(private canvas: HTMLCanvasElement) {
 		this.engine = Engine.create({ gravity: { x: 0, y: PHYSICS.gravityY, scale: 0.001 } });
@@ -69,49 +214,14 @@ export class Game {
 		Events.on(this.engine, 'collisionStart', (ev) => {
 			for (const pair of ev.pairs) {
 				const a = pair.bodyA as FruitBody; const b = pair.bodyB as FruitBody;
-				if ((a as any).plugin?.tierIndex != null && (b as any).plugin?.tierIndex != null) {
-					this.tryMerge(a, b);
-				} else {
-					// land sound when fruit hits ground or wall
-					if (((a as any).plugin?.tierIndex != null) || ((b as any).plugin?.tierIndex != null)) this.audio.play('land');
-				}
+				// land sound when fruit hits ground or wall
+				if (((a as any).plugin?.tierIndex != null) || ((b as any).plugin?.tierIndex != null)) this.audio.play('land');
 			}
 		});
 	}
 
-	private tryMerge(a: FruitBody, b: FruitBody) {
-		if (a.plugin.tierIndex !== b.plugin.tierIndex) return;
-		if (a.plugin.merging || b.plugin.merging) return;
-		// gentle touch: relative speed small
-		const relVx = a.velocity.x - b.velocity.x; const relVy = a.velocity.y - b.velocity.y;
-		const relSpeed2 = relVx*relVx + relVy*relVy;
-		if (relSpeed2 > 6) return; // heuristic threshold
-		const tier = a.plugin.tierIndex;
-		if (tier >= TIER_CONFIG.length - 1) return;
-		a.plugin.merging = b.plugin.merging = true;
-		const posX = (a.position.x + b.position.x) / 2;
-		const posY = (a.position.y + b.position.y) / 2;
-		// remove both and spawn next tier with a pop effect
-		World.remove(this.world, a);
-		World.remove(this.world, b);
-		this.bodies = this.bodies.filter(x => x !== a && x !== b);
-		const next = this.createFruit(tier + 1, posX, posY - 6);
-		// burst upward slightly
-		Body.setVelocity(next, { x: 0, y: -3 });
-		this.audio.play('pop');
-		// visual effect
-		this.effects.push({ x: posX, y: posY, t: 0, duration: 300 });
-		// scoring and combo
-		const now = performance.now();
-		if (now - this.lastMergeTime <= SCORING.comboWindowMs) this.comboCount++; else this.comboCount = 1;
-		this.lastMergeTime = now;
-		const gained = (SCORING.mergeBase * (tier + 1)) * this.comboCount;
-		this.score += Math.floor(gained);
-		if (this.score > this.best) { this.best = this.score; try { localStorage.setItem('best-score', String(this.best)); } catch {} }
-		this.updateHUD();
-	}
 
-	private createFruit(tierIndex: number, x: number, y: number): FruitBody {
+	private createFruit(tierIndex: number, x: number, y: number, vx: number = 0, vy: number = 0): FruitBody {
 		const cfg = TIER_CONFIG[tierIndex];
 		const r = getFruitRadius(tierIndex);
 		const body = Bodies.circle(x, y, r, {
@@ -121,9 +231,20 @@ export class Game {
 			mass: cfg.mass,
 		}) as FruitBody;
 		(body as any).plugin = { tierIndex };
+		(body as any).fruit = { 
+			tier: tierIndex, 
+			radius: r, 
+			lastMergeAt: null 
+		};
+		Body.setVelocity(body, { x: vx, y: vy });
 		World.add(this.world, body);
 		this.bodies.push(body);
 		return body;
+	}
+
+	private removeFruitBody(body: FruitBody) {
+		World.remove(this.world, body);
+		this.bodies = this.bodies.filter(b => b !== body);
 	}
 
 	private rollNext() {
@@ -246,7 +367,31 @@ export class Game {
 			}
 			if (this.input.consumeDrop()) this.dropFruit();
 			if (!this.paused && !this.gameOver) {
-				while (acc >= step) { Engine.update(this.engine, step); acc -= step; }
+				while (acc >= step) { 
+					Engine.update(this.engine, step); 
+					acc -= step; 
+					
+					// Process immediate merges after physics update
+					this.mergeManager.collectCandidates(this.bodies, this.world, this.engine);
+					this.mergeManager.process(this.world, this.bodies, 
+						(tier, x, y, vx, vy) => {
+							const newFruit = this.createFruit(tier, x, y, vx, vy);
+							// Add visual effect and audio
+							this.effects.push({ x, y, t: 0, duration: 300 });
+							this.audio.play('pop');
+							// Update scoring and combo
+							const now = performance.now();
+							if (now - this.lastMergeTime <= SCORING.comboWindowMs) this.comboCount++; else this.comboCount = 1;
+							this.lastMergeTime = now;
+							const gained = (SCORING.mergeBase * tier) * this.comboCount;
+							this.score += Math.floor(gained);
+							if (this.score > this.best) { this.best = this.score; try { localStorage.setItem('best-score', String(this.best)); } catch {} }
+							this.updateHUD();
+							return newFruit;
+						}, 
+						(body) => this.removeFruitBody(body)
+					);
+				}
 				this.updateGameOver(dt);
 			}
 			// update effects
