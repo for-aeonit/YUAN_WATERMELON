@@ -4,10 +4,7 @@ import { CanvasRenderer, RenderableBody } from './renderer';
 import { Input } from './input';
 import { AudioManager } from './audio';
 
-type FruitBody = Body & { 
-	plugin: { tierIndex: number; merging?: boolean };
-	fruit: { tier: number; radius: number; lastMergeAt: number | null };
-};
+type FruitBody = Body & { plugin: { tierIndex: number; merging?: boolean } };
 
 export class Game {
 	private engine: Engine;
@@ -82,121 +79,36 @@ export class Game {
 		});
 	}
 
-	private processChainMerges() {
-		const now = performance.now();
-		const maxVelocityThreshold = 5; // Maximum relative velocity for chain merging
-		
-		// Group fruits by tier
-		const fruitsByTier = new Map<number, FruitBody[]>();
-		for (const body of this.bodies) {
-			if (!body.fruit) continue;
-			const tier = body.fruit.tier;
-			if (!fruitsByTier.has(tier)) {
-				fruitsByTier.set(tier, []);
-			}
-			fruitsByTier.get(tier)!.push(body);
-		}
-		
-		// Process each tier for potential chain merges
-		for (const [tier, fruits] of fruitsByTier) {
-			if (fruits.length < 2) continue;
-			if (tier >= TIER_CONFIG.length - 1) continue;
-			
-			// Check all pairs of fruits in the same tier
-			for (let i = 0; i < fruits.length; i++) {
-				for (let j = i + 1; j < fruits.length; j++) {
-					const a = fruits[i];
-					const b = fruits[j];
-					
-					// Skip if already merging or on cooldown
-					if (a.plugin.merging || b.plugin.merging) continue;
-					if (a.fruit.lastMergeAt && now - a.fruit.lastMergeAt < 16) continue;
-					if (b.fruit.lastMergeAt && now - b.fruit.lastMergeAt < 16) continue;
-					
-					// Check distance and overlap
-					const distance = Math.sqrt((a.position.x - b.position.x) ** 2 + (a.position.y - b.position.y) ** 2);
-					const minRadius = Math.min(a.fruit.radius, b.fruit.radius);
-					const overlapThreshold = minRadius * 0.15; // 15% tolerance for chain merges
-					
-					if (distance > (a.fruit.radius + b.fruit.radius - overlapThreshold)) continue;
-					
-					// Check relative velocity
-					const relVx = a.velocity.x - b.velocity.x;
-					const relVy = a.velocity.y - b.velocity.y;
-					const relSpeed2 = relVx * relVx + relVy * relVy;
-					
-					if (relSpeed2 > maxVelocityThreshold * maxVelocityThreshold) continue;
-					
-					// Perform the chain merge
-					this.performMerge(a, b, now);
-					break; // Break inner loop to avoid processing the same fruit twice
-				}
-			}
-		}
-	}
-	
-	private performMerge(a: FruitBody, b: FruitBody, now: number) {
+	private tryMerge(a: FruitBody, b: FruitBody) {
+		if (a.plugin.tierIndex !== b.plugin.tierIndex) return;
+		if (a.plugin.merging || b.plugin.merging) return;
+		// gentle touch: relative speed small
+		const relVx = a.velocity.x - b.velocity.x; const relVy = a.velocity.y - b.velocity.y;
+		const relSpeed2 = relVx*relVx + relVy*relVy;
+		if (relSpeed2 > 6) return; // heuristic threshold
 		const tier = a.plugin.tierIndex;
+		if (tier >= TIER_CONFIG.length - 1) return;
 		a.plugin.merging = b.plugin.merging = true;
 		const posX = (a.position.x + b.position.x) / 2;
 		const posY = (a.position.y + b.position.y) / 2;
-		
-		// Calculate average velocity for the merged fruit
-		const avgVx = (a.velocity.x + b.velocity.x) / 2;
-		const avgVy = (a.velocity.y + b.velocity.y) / 2;
-		
 		// remove both and spawn next tier with a pop effect
 		World.remove(this.world, a);
 		World.remove(this.world, b);
 		this.bodies = this.bodies.filter(x => x !== a && x !== b);
 		const next = this.createFruit(tier + 1, posX, posY - 6);
-		
-		// Set velocity to average of merged fruits with slight upward burst
-		Body.setVelocity(next, { x: avgVx, y: avgVy - 2 });
-		
-		// Mark the new fruit as just merged
-		next.fruit.lastMergeAt = now;
-		
+		// burst upward slightly
+		Body.setVelocity(next, { x: 0, y: -3 });
 		this.audio.play('pop');
 		// visual effect
 		this.effects.push({ x: posX, y: posY, t: 0, duration: 300 });
 		// scoring and combo
+		const now = performance.now();
 		if (now - this.lastMergeTime <= SCORING.comboWindowMs) this.comboCount++; else this.comboCount = 1;
 		this.lastMergeTime = now;
 		const gained = (SCORING.mergeBase * (tier + 1)) * this.comboCount;
 		this.score += Math.floor(gained);
 		if (this.score > this.best) { this.best = this.score; try { localStorage.setItem('best-score', String(this.best)); } catch {} }
 		this.updateHUD();
-	}
-
-	private tryMerge(a: FruitBody, b: FruitBody) {
-		if (a.plugin.tierIndex !== b.plugin.tierIndex) return;
-		if (a.plugin.merging || b.plugin.merging) return;
-		
-		// Check cooldown - prevent merging again in the same frame
-		const now = performance.now();
-		if (a.fruit.lastMergeAt && now - a.fruit.lastMergeAt < 16) return; // 16ms = 1 frame at 60fps
-		if (b.fruit.lastMergeAt && now - b.fruit.lastMergeAt < 16) return;
-		
-		// More sensitive merge detection - check overlap with epsilon tolerance
-		const distance = Math.sqrt((a.position.x - b.position.x) ** 2 + (a.position.y - b.position.y) ** 2);
-		const minRadius = Math.min(a.fruit.radius, b.fruit.radius);
-		const overlapThreshold = minRadius * 0.1; // 10% of smallest radius as tolerance
-		
-		// Check if fruits are overlapping or very close
-		if (distance > (a.fruit.radius + b.fruit.radius - overlapThreshold)) return;
-		
-		// Check relative velocity - more lenient threshold for immediate merging
-		const relVx = a.velocity.x - b.velocity.x;
-		const relVy = a.velocity.y - b.velocity.y;
-		const relSpeed2 = relVx * relVx + relVy * relVy;
-		if (relSpeed2 > 10) return; // Slightly higher threshold for immediate merging
-		
-		const tier = a.plugin.tierIndex;
-		if (tier >= TIER_CONFIG.length - 1) return;
-		
-		// Use the shared performMerge method
-		this.performMerge(a, b, now);
 	}
 
 	private createFruit(tierIndex: number, x: number, y: number): FruitBody {
@@ -209,7 +121,6 @@ export class Game {
 			mass: cfg.mass,
 		}) as FruitBody;
 		(body as any).plugin = { tierIndex };
-		(body as any).fruit = { tier: tierIndex, radius: r, lastMergeAt: null };
 		World.add(this.world, body);
 		this.bodies.push(body);
 		return body;
@@ -336,8 +247,6 @@ export class Game {
 			if (this.input.consumeDrop()) this.dropFruit();
 			if (!this.paused && !this.gameOver) {
 				while (acc >= step) { Engine.update(this.engine, step); acc -= step; }
-				// Process chain merges after physics updates
-				this.processChainMerges();
 				this.updateGameOver(dt);
 			}
 			// update effects
