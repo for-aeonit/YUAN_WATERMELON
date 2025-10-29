@@ -81,7 +81,6 @@ export class Game {
 				}
 			}
 		});
-		
 		Events.on(this.engine, 'collisionActive', (ev) => {
 			for (const pair of ev.pairs) {
 				const a = pair.bodyA as FruitBody; const b = pair.bodyB as FruitBody;
@@ -156,10 +155,9 @@ export class Game {
 		
 		this.mergeCandidates.clear();
 	}
-
+	
 	private processChainMerges() {
 		const now = performance.now();
-		const maxVelocityThreshold = 5; // Maximum relative velocity for chain merging
 		
 		// Group fruits by tier
 		const fruitsByTier = new Map<number, FruitBody[]>();
@@ -185,22 +183,16 @@ export class Game {
 					
 					// Skip if already merging or on cooldown
 					if (a.plugin.merging || b.plugin.merging) continue;
-					if (a.fruit.lastMergeAt && now - a.fruit.lastMergeAt < 16) continue;
-					if (b.fruit.lastMergeAt && now - b.fruit.lastMergeAt < 16) continue;
+					if (now - (a.fruit.lastMergeAt || 0) < 80) continue;
+					if (now - (b.fruit.lastMergeAt || 0) < 80) continue;
 					
-					// Check distance and overlap
-					const distance = Math.sqrt((a.position.x - b.position.x) ** 2 + (a.position.y - b.position.y) ** 2);
-					const minRadius = Math.min(a.fruit.radius, b.fruit.radius);
-					const overlapThreshold = minRadius * 0.15; // 15% tolerance for chain merges
+					// Check distance and overlap with precise detection
+					const rMin = Math.min(a.fruit.radius, b.fruit.radius);
+					const mergeEps = rMin * 0.15;
+					const dist = Math.hypot(a.position.x - b.position.x, a.position.y - b.position.y);
+					const relV = Math.hypot(a.velocity.x - b.velocity.x, a.velocity.y - b.velocity.y);
 					
-					if (distance > (a.fruit.radius + b.fruit.radius - overlapThreshold)) continue;
-					
-					// Check relative velocity
-					const relVx = a.velocity.x - b.velocity.x;
-					const relVy = a.velocity.y - b.velocity.y;
-					const relSpeed2 = relVx * relVx + relVy * relVy;
-					
-					if (relSpeed2 > maxVelocityThreshold * maxVelocityThreshold) continue;
+					if (dist > (a.fruit.radius + b.fruit.radius - mergeEps) || relV >= 3) continue;
 					
 					// Perform the chain merge
 					this.performMerge(a, b, now);
@@ -249,37 +241,7 @@ export class Game {
 		this.score += Math.floor(gained);
 		if (this.score > this.best) { this.best = this.score; try { localStorage.setItem('best-score', String(this.best)); } catch {} }
 		this.updateHUD();
-		
-		// Check for chain merges with the new fruit
-		this.checkChainMerges(newFruit, now);
 	}
-	
-	private checkChainMerges(newFruit: FruitBody, now: number) {
-		if (!newFruit.fruit) return;
-		
-		// Look for other same-tier fruits nearby and merge
-		for (const otherFruit of this.bodies) {
-			if (newFruit === otherFruit || !otherFruit.fruit) continue;
-			if (newFruit.fruit.tier !== otherFruit.fruit.tier) continue;
-			if (otherFruit.plugin.merging) continue;
-			
-			// Check cooldown
-			if (now - (otherFruit.fruit.lastMergeAt || 0) < 80) continue;
-			
-			// Check distance and overlap
-			const rMin = Math.min(newFruit.fruit.radius, otherFruit.fruit.radius);
-			const mergeEps = rMin * 0.15;
-			const dist = Math.hypot(newFruit.position.x - otherFruit.position.x, newFruit.position.y - otherFruit.position.y);
-			const relV = Math.hypot(newFruit.velocity.x - otherFruit.velocity.x, newFruit.velocity.y - otherFruit.velocity.y);
-			
-			if (dist <= (newFruit.fruit.radius + otherFruit.fruit.radius - mergeEps) && relV < 3) {
-				// Perform chain merge immediately
-				this.performMerge(newFruit, otherFruit, now);
-				break; // Only merge with one fruit at a time to avoid conflicts
-			}
-		}
-	}
-
 
 	private createFruit(tierIndex: number, x: number, y: number): FruitBody {
 		const cfg = TIER_CONFIG[tierIndex];
